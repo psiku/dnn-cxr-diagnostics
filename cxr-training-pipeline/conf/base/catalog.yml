@@ -94,3 +94,8 @@ dummy_confusion_matrix:
   type: matplotlib.MatplotlibDataset
   filepath: data/08_reporting/dummy_confusion_matrix.png
   versioned: true
+
+
+cxr8_metadata:
+  type: pandas.CSVDataset
+  filepath: data/01_raw/Data_Entry_2017_v2020.csv
