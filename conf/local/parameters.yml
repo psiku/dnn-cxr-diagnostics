@@ -1,0 +1,6 @@
+# Local overrides (not committed to version control).
+# Example — override to run a quick smoke-test:
+#
+# training:
+#   epochs: 1
+#   batch_size: 4

@@ -1,0 +1,26 @@
+# Kedro DataCatalog — define all dataset inputs / outputs here.
+# See https://docs.kedro.org/en/stable/data/data_catalog.html
+
+raw_xray_images:
+  type: partitions.PartitionedDataset
+  path: data/raw
+  dataset: pillow.ImageDataset
+
+train_dataset:
+  type: partitions.PartitionedDataset
+  path: data/processed/train
+  dataset: pillow.ImageDataset
+
+val_dataset:
+  type: partitions.PartitionedDataset
+  path: data/processed/val
+  dataset: pillow.ImageDataset
+
+test_dataset:
+  type: partitions.PartitionedDataset
+  path: data/processed/test
+  dataset: pillow.ImageDataset
+
+model_checkpoint:
+  type: pickle.PickleDataset
+  filepath: models/best_model.pt

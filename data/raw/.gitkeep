@@ -1,0 +1,10 @@
+# Raw, unprocessed images — place your dataset here.
+# Directory structure expected by CXRDataset:
+#
+#   raw/
+#     NORMAL/
+#       image001.png
+#       ...
+#     PNEUMONIA/
+#       image001.png
+#       ...

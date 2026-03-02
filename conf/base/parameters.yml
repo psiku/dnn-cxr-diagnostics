@@ -1,0 +1,19 @@
+# Model hyper-parameters and training configuration.
+# Override values locally in conf/local/parameters.yml.
+
+model:
+  num_classes: 1
+  pretrained: true
+  dropout: 0.5
+
+training:
+  epochs: 20
+  learning_rate: 0.0001
+  batch_size: 32
+  train_val_split: 0.8
+  random_seed: 42
+
+data:
+  image_size: [224, 224]
+  normalize_mean: [0.485, 0.456, 0.406]
+  normalize_std: [0.229, 0.224, 0.225]
