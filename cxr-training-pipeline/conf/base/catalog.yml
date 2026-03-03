@@ -99,3 +99,7 @@ dummy_confusion_matrix:
 cxr8_metadata:
   type: pandas.CSVDataset
   filepath: data/01_raw/Data_Entry_2017_v2020.csv
+
+cxr8_bbox:
+  type: pandas.CSVDataset
+  filepath: data/01_raw/BBox_List_2017.csv
