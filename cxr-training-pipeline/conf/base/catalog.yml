@@ -95,7 +95,7 @@ dummy_confusion_matrix:
   filepath: data/08_reporting/dummy_confusion_matrix.png
   versioned: true
 
-
+# 01_raw files
 cxr8_metadata:
   type: pandas.CSVDataset
   filepath: data/01_raw/Data_Entry_2017_v2020.csv
@@ -111,3 +111,16 @@ cxr8_train_val_list:
 cxr8_test_list:
   type: text.TextDataset
   filepath: data/01_raw/test_list.txt
+
+# 02_intermediate files
+xray_train_val:
+  type: pandas.CSVDataset
+  filepath: data/02_intermediate/dataset_splits/train_val.csv
+  load_args:
+    dtype_backend: "numpy_nullable"
+
+xray_test:
+  type: pandas.CSVDataset
+  filepath: data/02_intermediate/dataset_splits/test.csv
+  load_args:
+    dtype_backend: "numpy_nullable"
