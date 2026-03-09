@@ -208,3 +208,10 @@ __marimo__/
 
 # data folders
 data/
+
+# WUT Thesis
+WUT-Thesis/
+
+# mlflow files
+mlruns/
+mlflow*
