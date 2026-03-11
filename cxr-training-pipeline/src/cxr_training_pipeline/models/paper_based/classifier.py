@@ -15,9 +15,8 @@ class CXRClassifier(nn.Module):
         transition_dim: int = 2048,
         pooling: str = "lse",   # "lse", "avg", "max"
         lse_r: float = 10.0,
-        pretrained: bool = True,
-        grayscale: bool = True,
-        freeze_backbone: bool = False,
+        backbone: ResNet50Backbone = ResNet50Backbone(),
+        backbone_trainable_layers: list[str] = []
     ):
         super().__init__()
 
@@ -25,14 +24,8 @@ class CXRClassifier(nn.Module):
         self.transition_dim = transition_dim
         self.pooling = pooling
 
-        self.backbone = ResNet50Backbone(
-            pretrained=pretrained,
-            grayscale=grayscale,
-        )
-
-        if freeze_backbone:
-            for p in self.backbone.parameters():
-                p.requires_grad = False
+        self.backbone = backbone
+        self.backbone.set_trainable_layers(backbone_trainable_layers)
 
         # transition layer
         self.transition = nn.Sequential(

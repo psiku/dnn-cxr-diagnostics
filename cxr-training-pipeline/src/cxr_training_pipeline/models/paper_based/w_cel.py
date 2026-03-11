@@ -7,25 +7,28 @@ class BatchBalancedBCEWithLogitsLoss(nn.Module):
     """
     Loss function based on: "https://arxiv.org/pdf/1705.02315"
     """
-    def __init__(self):
+    def __init__(self, eps: float = 1e-8):
         super().__init__()
+        self.eps = eps
 
     def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
         targets = targets.float()
 
-        pos_mask = targets == 1
-        neg_mask = targets == 0
+        pos_mask = (targets == 1).float()
+        neg_mask = (targets == 0).float()
 
-        p = pos_mask.sum().clamp(min=1).float()
-        n = neg_mask.sum().clamp(min=1).float()
+        p = pos_mask.sum(dim=0).clamp(min=1.0)
+        n = neg_mask.sum(dim=0).clamp(min=1.0)
 
         beta_p = (p + n) / p
         beta_n = (p + n) / n
 
-        pos_loss = -(F.logsigmoid(logits)[pos_mask]).sum()
-        neg_loss = -(F.logsigmoid(-logits)[neg_mask]).sum()
+        log_pos = F.logsigmoid(logits)
+        log_neg = F.logsigmoid(-logits)
 
-        loss = beta_p * pos_loss + beta_n * neg_loss
-        loss = loss / (p + n)
+        pos_loss = -beta_p * pos_mask * log_pos
+        neg_loss = -beta_n * neg_mask * log_neg
 
-        return loss
+        loss = pos_loss + neg_loss
+
+        return loss.mean()

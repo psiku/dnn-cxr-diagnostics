@@ -7,7 +7,7 @@ from torchvision.models import (
 )
 
 class ResNet50Backbone(nn.Module):
-    def __init__(self, pretrained: bool = True, freeze: bool = False, grayscale: bool = True):
+    def __init__(self, pretrained: bool = True,  grayscale: bool = True):
         super().__init__()
 
         weights = ResNet50_Weights.DEFAULT if pretrained else None
@@ -47,3 +47,13 @@ class ResNet50Backbone(nn.Module):
         x = self.layer3(x)
         x = self.layer4(x)
         return x  # [B, 2048, H/32, W/32]
+
+    def set_trainable_layers(self, trainable_layers: list[str] = []):
+        for name, module in self.named_children():
+            trainable = name in trainable_layers
+
+            for p in module.parameters():
+                p.requires_grad = trainable
+
+            if not trainable:
+                module.eval()
