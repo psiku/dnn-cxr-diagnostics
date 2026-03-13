@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from src.cxr_training_pipeline.models.resnet_backbone import ResNet50Backbone
-from src.cxr_training_pipeline.models.lse_poling import LSEPool2d
+from cxr_training_pipeline.models.lse_poling import LSEPool2d
+from cxr_training_pipeline.models.resnet_backbone import ResNet50Backbone
 
 
 class CXRClassifier(nn.Module):

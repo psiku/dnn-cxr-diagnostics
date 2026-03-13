@@ -1,4 +1,4 @@
-from src.cxr_training_pipeline.models.paper_based.w_cel import BatchBalancedBCEWithLogitsLoss
+from cxr_training_pipeline.models.paper_based.w_cel import BatchBalancedBCEWithLogitsLoss
 from torch import nn
 import torch
 import pytorch_lightning as pl

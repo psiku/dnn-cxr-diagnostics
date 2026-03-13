@@ -4,7 +4,7 @@ import numpy as np
 
 from torch.utils.data import DataLoader
 from torchvision import transforms
-from src.cxr_training_pipeline.datasets.cxr_dataset import ImageOnlyDataset
+from cxr_training_pipeline.datasets.cxr_dataset import ImageOnlyDataset
 
 
 class ImageOnlyDataModule(pl.LightningDataModule):
