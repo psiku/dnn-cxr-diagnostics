@@ -1,0 +1,3 @@
+# Global parameters for precomputing data
+resize: 224
+precomputed_root: data/02_intermediate/precomputed
