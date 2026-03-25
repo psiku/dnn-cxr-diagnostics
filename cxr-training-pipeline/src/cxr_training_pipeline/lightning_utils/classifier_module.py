@@ -11,6 +11,7 @@ from torchmetrics.classification import (
     MultilabelRecall,
 )
 
+
 class ClassifierModule(pl.LightningModule):
     def __init__(
         self,
@@ -38,28 +39,40 @@ class ClassifierModule(pl.LightningModule):
         self.register_buffer("thresholds", default_thresholds)
 
         # probs collection
-        prob_metrics_macro = MetricCollection({
-            "auroc_macro": MultilabelAUROC(num_labels=num_classes, average="macro"),
-            "ap_macro": MultilabelAveragePrecision(num_labels=num_classes, average="macro"),
-        })
+        prob_metrics_macro = MetricCollection(
+            {
+                "auroc_macro": MultilabelAUROC(num_labels=num_classes, average="macro"),
+                "ap_macro": MultilabelAveragePrecision(num_labels=num_classes, average="macro"),
+            }
+        )
 
-        prob_metrics_micro = MetricCollection({
-            "auroc_micro": MultilabelAUROC(num_labels=num_classes, average="micro"),
-            "ap_micro": MultilabelAveragePrecision(num_labels=num_classes, average="micro"),
-        })
+        prob_metrics_micro = MetricCollection(
+            {
+                "auroc_micro": MultilabelAUROC(num_labels=num_classes, average="micro"),
+                "ap_micro": MultilabelAveragePrecision(num_labels=num_classes, average="micro"),
+            }
+        )
 
         # preds collection
-        pred_metrics_macro = MetricCollection({
-            "precision_macro": MultilabelPrecision(num_labels=num_classes, threshold=float(threshold), average="macro"),
-            "recall_macro": MultilabelRecall(num_labels=num_classes, threshold=float(threshold), average="macro"),
-            "f1_macro": MultilabelF1Score(num_labels=num_classes, threshold=float(threshold), average="macro"),
-        })
+        pred_metrics_macro = MetricCollection(
+            {
+                "precision_macro": MultilabelPrecision(
+                    num_labels=num_classes, threshold=float(threshold), average="macro"
+                ),
+                "recall_macro": MultilabelRecall(num_labels=num_classes, threshold=float(threshold), average="macro"),
+                "f1_macro": MultilabelF1Score(num_labels=num_classes, threshold=float(threshold), average="macro"),
+            }
+        )
 
-        pred_metrics_micro = MetricCollection({
-            "precision_micro": MultilabelPrecision(num_labels=num_classes, threshold=float(threshold), average="micro"),
-            "recall_micro": MultilabelRecall(num_labels=num_classes, threshold=float(threshold), average="micro"),
-            "f1_micro": MultilabelF1Score(num_labels=num_classes, threshold=float(threshold), average="micro"),
-        })
+        pred_metrics_micro = MetricCollection(
+            {
+                "precision_micro": MultilabelPrecision(
+                    num_labels=num_classes, threshold=float(threshold), average="micro"
+                ),
+                "recall_micro": MultilabelRecall(num_labels=num_classes, threshold=float(threshold), average="micro"),
+                "f1_micro": MultilabelF1Score(num_labels=num_classes, threshold=float(threshold), average="micro"),
+            }
+        )
 
         self.val_prob_metrics_macro = prob_metrics_macro.clone(prefix="val/")
         self.test_prob_metrics_macro = prob_metrics_macro.clone(prefix="test/")
@@ -71,7 +84,6 @@ class ClassifierModule(pl.LightningModule):
         self.val_pred_metrics_micro = pred_metrics_micro.clone(prefix="val/")
         self.test_pred_metrics_micro = pred_metrics_micro.clone(prefix="test/")
 
-
     def forward(self, image, retain_transition_grad: bool = False):
         return self.model(image, retain_transition_grad=retain_transition_grad)
 
@@ -82,9 +94,7 @@ class ClassifierModule(pl.LightningModule):
             raise ValueError(f"thresholds must be 1D, got shape={thresholds.shape}")
 
         if thresholds.numel() != self.hparams.num_classes:
-            raise ValueError(
-                f"thresholds must have {self.hparams.num_classes} elements, got {thresholds.numel()}"
-            )
+            raise ValueError(f"thresholds must have {self.hparams.num_classes} elements, got {thresholds.numel()}")
 
         self.thresholds.copy_(thresholds)
 
@@ -115,10 +125,34 @@ class ClassifierModule(pl.LightningModule):
         preds = self._get_preds(probs)
 
         self.log("val/loss", loss, on_step=False, on_epoch=True, prog_bar=True, batch_size=batch_size)
-        self.log_dict(self.val_prob_metrics_macro(probs, target_int), on_step=False, on_epoch=True, prog_bar=True, batch_size=batch_size)
-        self.log_dict(self.val_prob_metrics_micro(probs, target_int), on_step=False, on_epoch=True, prog_bar=False, batch_size=batch_size)
-        self.log_dict(self.val_pred_metrics_macro(preds, target_int), on_step=False, on_epoch=True, prog_bar=True, batch_size=batch_size)
-        self.log_dict(self.val_pred_metrics_micro(preds, target_int), on_step=False, on_epoch=True, prog_bar=False, batch_size=batch_size)
+        self.log_dict(
+            self.val_prob_metrics_macro(probs, target_int),
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            batch_size=batch_size,
+        )
+        self.log_dict(
+            self.val_prob_metrics_micro(probs, target_int),
+            on_step=False,
+            on_epoch=True,
+            prog_bar=False,
+            batch_size=batch_size,
+        )
+        self.log_dict(
+            self.val_pred_metrics_macro(preds, target_int),
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            batch_size=batch_size,
+        )
+        self.log_dict(
+            self.val_pred_metrics_micro(preds, target_int),
+            on_step=False,
+            on_epoch=True,
+            prog_bar=False,
+            batch_size=batch_size,
+        )
         return loss
 
     def test_step(self, batch, batch_idx):
@@ -127,10 +161,34 @@ class ClassifierModule(pl.LightningModule):
         preds = self._get_preds(probs)
 
         self.log("test/loss", loss, on_step=False, on_epoch=True, prog_bar=True, batch_size=batch_size)
-        self.log_dict(self.test_prob_metrics_macro(probs, target_int), on_step=False, on_epoch=True, prog_bar=True, batch_size=batch_size)
-        self.log_dict(self.test_prob_metrics_micro(probs, target_int), on_step=False, on_epoch=True, prog_bar=False, batch_size=batch_size)
-        self.log_dict(self.test_pred_metrics_macro(preds, target_int), on_step=False, on_epoch=True, prog_bar=True, batch_size=batch_size)
-        self.log_dict(self.test_pred_metrics_micro(preds, target_int), on_step=False, on_epoch=True, prog_bar=False, batch_size=batch_size)
+        self.log_dict(
+            self.test_prob_metrics_macro(probs, target_int),
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            batch_size=batch_size,
+        )
+        self.log_dict(
+            self.test_prob_metrics_micro(probs, target_int),
+            on_step=False,
+            on_epoch=True,
+            prog_bar=False,
+            batch_size=batch_size,
+        )
+        self.log_dict(
+            self.test_pred_metrics_macro(preds, target_int),
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            batch_size=batch_size,
+        )
+        self.log_dict(
+            self.test_pred_metrics_micro(preds, target_int),
+            on_step=False,
+            on_epoch=True,
+            prog_bar=False,
+            batch_size=batch_size,
+        )
         return loss
 
     def configure_optimizers(self):

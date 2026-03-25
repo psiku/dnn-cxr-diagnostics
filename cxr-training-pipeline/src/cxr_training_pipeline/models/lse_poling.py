@@ -7,6 +7,7 @@ class LSEPool2d(nn.Module):
     Log-Sum-Exp pooling.
     Returns tensor [B, C].
     """
+
     def __init__(self, r: float = 10.0, eps: float = 1e-6):
         super().__init__()
         self.r = r

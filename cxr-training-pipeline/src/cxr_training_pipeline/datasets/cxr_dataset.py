@@ -17,7 +17,8 @@ class ImageOnlyDataset(Dataset):
         labels_array (np.ndarray): Array of labels corresponding to each image.
         indices (np.ndarray | list[int] | None, optional): Indices of the samples to be included in the dataset. If None, all samples are included. Defaults to None.
         transform (callable, optional): Optional transform to be applied on a sample. Defaults to None.
-     """
+    """
+
     def __init__(
         self,
         df: pd.DataFrame,

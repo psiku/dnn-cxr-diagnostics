@@ -49,7 +49,7 @@ class ImageOnlyDataModule(pl.LightningDataModule):
                 images_array=self.train_val_images,
                 labels_array=self.y_train_val,
                 indices=self.train_idx,
-                transform=self.train_tfms
+                transform=self.train_tfms,
             )
 
             self.val_dataset = ImageOnlyDataset(
@@ -57,7 +57,7 @@ class ImageOnlyDataModule(pl.LightningDataModule):
                 images_array=self.train_val_images,
                 labels_array=self.y_train_val,
                 indices=self.val_idx,
-                transform=self.eval_tfms
+                transform=self.eval_tfms,
             )
 
         if stage == "test" or stage is None:
@@ -66,7 +66,7 @@ class ImageOnlyDataModule(pl.LightningDataModule):
                 images_array=self.test_images,
                 labels_array=self.y_test,
                 indices=None,
-                transform=self.eval_tfms
+                transform=self.eval_tfms,
             )
 
     def train_dataloader(self):

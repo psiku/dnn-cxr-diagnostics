@@ -6,6 +6,7 @@ from kedro.runner import SequentialRunner
 from cxr_training_pipeline.pipelines.data_science import create_pipeline as create_ds_pipeline
 from cxr_training_pipeline.pipelines.data_science.nodes import split_data
 
+
 @pytest.fixture
 def dummy_data():
     return pd.DataFrame(
@@ -16,6 +17,7 @@ def dummy_data():
             "price": [120, 290, 30],
         }
     )
+
 
 @pytest.fixture
 def dummy_parameters():
@@ -30,13 +32,12 @@ def dummy_parameters():
 
 
 def test_split_data(dummy_data, dummy_parameters):
-    X_train, X_test, y_train, y_test = split_data(
-        dummy_data, dummy_parameters["model_options"]
-    )
+    X_train, X_test, y_train, y_test = split_data(dummy_data, dummy_parameters["model_options"])
     assert len(X_train) == 2
     assert len(y_train) == 2
     assert len(X_test) == 1
     assert len(y_test) == 1
+
 
 def test_split_data_missing_price(dummy_data, dummy_parameters):
     dummy_data_missing_price = dummy_data.drop(columns="price")
@@ -45,12 +46,9 @@ def test_split_data_missing_price(dummy_data, dummy_parameters):
 
     assert "price" in str(e_info.value)
 
+
 def test_data_science_pipeline(caplog, dummy_data, dummy_parameters):
-    pipeline = (
-        create_ds_pipeline()
-        .from_nodes("split_data_node")
-        .to_nodes("evaluate_model_node")
-    )
+    pipeline = create_ds_pipeline().from_nodes("split_data_node").to_nodes("evaluate_model_node")
     catalog = DataCatalog()
     catalog["model_input_table"] = dummy_data
     catalog["params:model_options"] = dummy_parameters["model_options"]

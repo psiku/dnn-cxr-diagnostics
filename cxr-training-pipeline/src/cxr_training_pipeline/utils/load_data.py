@@ -20,4 +20,4 @@ def make_train_val_indices(train_val_df, val_size=0.25, random_state=42):
 
 
 def load_mmap_array(path: str, shape: tuple):
-    return np.memmap(path, dtype="uint8",mode="r", shape=shape)
+    return np.memmap(path, dtype="uint8", mode="r", shape=shape)

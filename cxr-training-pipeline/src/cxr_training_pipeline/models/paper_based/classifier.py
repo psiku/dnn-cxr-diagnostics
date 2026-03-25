@@ -9,14 +9,15 @@ class CXRClassifier(nn.Module):
     """
     Classifier implementation based on: "https://arxiv.org/pdf/1705.02315"
     """
+
     def __init__(
         self,
         num_classes: int = 14,
         transition_dim: int = 2048,
-        pooling: str = "lse",   # "lse", "avg", "max"
+        pooling: str = "lse",  # "lse", "avg", "max"
         lse_r: float = 10.0,
         backbone: ResNet50Backbone = ResNet50Backbone(),
-        backbone_trainable_layers: list[str] = []
+        backbone_trainable_layers: list[str] = [],
     ):
         super().__init__()
 
@@ -60,16 +61,16 @@ class CXRClassifier(nn.Module):
 
     def forward(self, image: torch.Tensor, retain_transition_grad: bool = False):
         # backbone activation maps
-        conv_maps = self.backbone(image)                  # [B, 2048, h, w]
+        conv_maps = self.backbone(image)  # [B, 2048, h, w]
 
         # transition maps
-        transition_maps = self.transition(conv_maps)      # [B, D, h, w]
+        transition_maps = self.transition(conv_maps)  # [B, D, h, w]
 
         if retain_transition_grad:
             transition_maps.retain_grad()
-        pooled_features = self._pool_features(transition_maps)   # [B, D]
+        pooled_features = self._pool_features(transition_maps)  # [B, D]
 
-        logits = self.prediction(pooled_features)         # [B, C]
+        logits = self.prediction(pooled_features)  # [B, C]
 
         return {
             "logits": logits,
@@ -85,8 +86,8 @@ class CXRClassifier(nn.Module):
         self.eval()
         out = self.forward(image, retain_transition_grad=False)
 
-        transition_maps = out["transition_maps"]            # [B, D, h, w]
-        class_weights = self.prediction.weight[class_idx]   # [D]
+        transition_maps = out["transition_maps"]  # [B, D, h, w]
+        class_weights = self.prediction.weight[class_idx]  # [D]
 
         cam = torch.einsum("d,bdhw->bhw", class_weights, transition_maps)
         cam = F.relu(cam)

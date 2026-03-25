@@ -6,8 +6,9 @@ from torchvision.models import (
     ResNet50_Weights,
 )
 
+
 class ResNet50Backbone(nn.Module):
-    def __init__(self, pretrained: bool = True,  grayscale: bool = True):
+    def __init__(self, pretrained: bool = True, grayscale: bool = True):
         super().__init__()
 
         weights = ResNet50_Weights.DEFAULT if pretrained else None

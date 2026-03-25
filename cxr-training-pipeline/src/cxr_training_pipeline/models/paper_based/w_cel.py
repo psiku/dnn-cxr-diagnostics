@@ -7,6 +7,7 @@ class BatchBalancedBCEWithLogitsLoss(nn.Module):
     """
     Loss function based on: "https://arxiv.org/pdf/1705.02315"
     """
+
     def __init__(self, eps: float = 1e-8):
         super().__init__()
         self.eps = eps
