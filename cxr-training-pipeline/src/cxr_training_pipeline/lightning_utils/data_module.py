@@ -1,21 +1,30 @@
 import pytorch_lightning as pl
 import pandas as pd
 import numpy as np
-
+from abc import ABC, abstractmethod
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from cxr_training_pipeline.datasets.cxr_dataset import ImageOnlyDataset
 
 
-class ImageOnlyDataModule(pl.LightningDataModule):
+class BaseDataModule(pl.LightningDataModule, ABC):
+    def __init__(self, **kwargs):
+        super().__init__()
+
+    @abstractmethod
+    def setup(self, stage=None):
+        pass
+
+
+class ImageOnlyDataModule(BaseDataModule):
     def __init__(
         self,
         train_val_df: pd.DataFrame,
         test_df: pd.DataFrame,
-        train_val_images: np.ndarray,
-        test_images: np.ndarray,
-        y_train_val: np.ndarray,
-        y_test: np.ndarray,
+        train_val_images_path: str,
+        test_images_path: str,
+        y_train_val_path: str,
+        y_test_path: str,
         train_idx: np.ndarray,
         val_idx: np.ndarray,
         batch_size: int = 8,
@@ -26,10 +35,10 @@ class ImageOnlyDataModule(pl.LightningDataModule):
         super().__init__()
         self.train_val_df = train_val_df
         self.test_df = test_df
-        self.train_val_images = train_val_images
-        self.test_images = test_images
-        self.y_train_val = y_train_val
-        self.y_test = y_test
+        self.train_val_images_path = train_val_images_path
+        self.test_images_path = test_images_path
+        self.y_train_val_path = y_train_val_path
+        self.y_test_path = y_test_path
         self.train_idx = np.asarray(train_idx)
         self.val_idx = np.asarray(val_idx)
         self.batch_size = batch_size
@@ -42,20 +51,25 @@ class ImageOnlyDataModule(pl.LightningDataModule):
         self.test_dataset = None
 
     def setup(self, stage=None):
+        # Load memmaps late to avoid saving massive arrays in external workflows
+        train_val_images = np.load(self.train_val_images_path, mmap_mode="r")
+        y_train_val = np.load(self.y_train_val_path, mmap_mode="r")
+        test_images = np.load(self.test_images_path, mmap_mode="r")
+        y_test = np.load(self.y_test_path, mmap_mode="r")
 
         if stage == "fit" or stage is None:
             self.train_dataset = ImageOnlyDataset(
                 df=self.train_val_df,
-                images_array=self.train_val_images,
-                labels_array=self.y_train_val,
+                images_array=train_val_images,
+                labels_array=y_train_val,
                 indices=self.train_idx,
                 transform=self.train_tfms,
             )
 
             self.val_dataset = ImageOnlyDataset(
                 df=self.train_val_df,
-                images_array=self.train_val_images,
-                labels_array=self.y_train_val,
+                images_array=train_val_images,
+                labels_array=y_train_val,
                 indices=self.val_idx,
                 transform=self.eval_tfms,
             )
@@ -63,8 +77,8 @@ class ImageOnlyDataModule(pl.LightningDataModule):
         if stage == "test" or stage is None:
             self.test_dataset = ImageOnlyDataset(
                 df=self.test_df,
-                images_array=self.test_images,
-                labels_array=self.y_test,
+                images_array=test_images,
+                labels_array=y_test,
                 indices=None,
                 transform=self.eval_tfms,
             )

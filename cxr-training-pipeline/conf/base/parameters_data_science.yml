@@ -1,12 +1,53 @@
-model_options:
-  test_size: 0.2
-  random_state: 3
-  features:
-    - engines
-    - passenger_capacity
-    - crew
-    - d_check_complete
-    - moon_clearance_complete
-    - iata_approved
-    - company_rating
-    - review_scores_rating
+training:
+  # Indicies split
+  split:
+    val_size: 0.25
+    random_state: 42
+
+  # Data augmentations
+  transforms:
+    random_rotation: 10
+    random_translate: [0.05, 0.05]
+    random_scale: [0.95, 1.05]
+
+  datamodule:
+    name: "image_only"
+    kwargs:
+      batch_size: 32
+      num_workers: 0
+      train_val_images_path: "${globals:precomputed_root}/${globals:resize}/train_images.npy"
+      test_images_path: "${globals:precomputed_root}/${globals:resize}/test_images.npy"
+      y_train_val_path: "${globals:precomputed_root}/${globals:resize}/train_labels.npy"
+      y_test_path: "${globals:precomputed_root}/${globals:resize}/test_labels.npy"
+
+  classifier:
+    name: "cxr_classifier"
+    kwargs:
+      num_classes: 14
+      transition_dim: 2048
+      pooling: "lse"
+      lse_r: 10.0
+      backbone_trainable_layers:
+        - "layer4"
+
+
+  # ligthning wrapper for the classifier
+  lit_module:
+    name: "default_classifier"
+    kwargs:
+      num_classes: 14
+      lr: 0.0001
+      threshold: 0.5
+
+  trainer:
+    max_epochs: 1
+    precision: "16-mixed"
+    log_every_n_steps: 10
+    accumulate_grad_batches: 1
+    patience: 5
+
+  # mlflow setup
+  mlflow:
+    experiment_name: "CXR_Classification"
+    run_name: "baseline_run"
+    tracking_uri: "http://127.0.0.1:5000"

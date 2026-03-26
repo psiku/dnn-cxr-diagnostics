@@ -1,5 +1,6 @@
 from cxr_training_pipeline.models.paper_based.w_cel import BatchBalancedBCEWithLogitsLoss
 from torch import nn
+from abc import ABC, abstractmethod
 import torch
 import pytorch_lightning as pl
 from torchmetrics import MetricCollection
@@ -12,7 +13,44 @@ from torchmetrics.classification import (
 )
 
 
-class ClassifierModule(pl.LightningModule):
+class BaseClassifier(pl.LightningModule, ABC):
+    def __init__(self, **kwargs):
+        super().__init__()
+
+    @abstractmethod
+    def forward(self, image, retain_transition_grad: bool = False):
+        pass
+
+    @abstractmethod
+    def set_thresholds(self, thresholds: torch.Tensor):
+        pass
+
+    @abstractmethod
+    def _get_preds(self, probs: torch.Tensor) -> torch.Tensor:
+        pass
+
+    @abstractmethod
+    def _shared_step(self, batch):
+        pass
+
+    @abstractmethod
+    def training_step(self, batch, batch_idx):
+        pass
+
+    @abstractmethod
+    def validation_step(self, batch, batch_idx):
+        pass
+
+    @abstractmethod
+    def test_step(self, batch, batch_idx):
+        pass
+
+    @abstractmethod
+    def configure_optimizers(self):
+        pass
+
+
+class ClassifierModule(BaseClassifier):
     def __init__(
         self,
         model: nn.Module,
