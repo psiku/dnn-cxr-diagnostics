@@ -45,3 +45,24 @@ train_val_labels_npy:
 test_labels_npy:
   type: cxr_training_pipeline.extras.custom_kedro_dataset.numpy_memmap_dataset.NumpyMemmapDataset
   filepath: ${globals:precomputed_root}/${globals:resize}/test_labels.npy
+
+# model, valus for defaultthresholds, and threshold search results
+best_checkpoint_path:
+  type: text.TextDataset
+  filepath: data/06_models/best_checkpoint_path.txt
+
+val_pred_proba:
+  type: cxr_training_pipeline.extras.custom_kedro_dataset.numpy_memmap_dataset.NumpyMemmapDataset
+  filepath: data/08_reporting/val_pred_proba.npy
+
+val_targets:
+  type: cxr_training_pipeline.extras.custom_kedro_dataset.numpy_memmap_dataset.NumpyMemmapDataset
+  filepath: data/08_reporting/val_targets.npy
+
+best_thresholds:
+  type: json.JSONDataset
+  filepath: data/08_reporting/best_thresholds.json
+
+threshold_search_results:
+  type: pandas.ParquetDataset
+  filepath: data/08_reporting/threshold_search_results.parquet
