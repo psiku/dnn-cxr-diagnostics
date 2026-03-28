@@ -3,10 +3,14 @@ from typing import Any, Dict, List
 from torchvision import transforms
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import MLFlowLogger
-from pytorch_lightning.callbacks import Callback, ModelCheckpoint, EarlyStopping, LearningRateMonitor
+from lightning.pytorch.callbacks import (
+    Callback,
+    EarlyStopping,
+    LearningRateMonitor,
+    ModelCheckpoint,
+)
 import pandas as pd
 from cxr_training_pipeline.lightning_utils.factory import DataModuleFactory, ClassifierFactory, LightningModuleFactory
-from cxr_training_pipeline.lightning_utils.classifier_module import ClassifierModule, BaseClassifier
 import torch
 import mlflow
 
@@ -101,16 +105,6 @@ def build_lightning_module_node(model: torch.nn.Module, lit_params: Dict[str, An
 
 
 # TRAINING NODE
-def _setup_logger(mlflow_params: Dict[str, Any]) -> MLFlowLogger:
-    """Initializes the MLFlow logger."""
-    return MLFlowLogger(
-        experiment_name=mlflow_params["experiment_name"],
-        tracking_uri=mlflow_params["tracking_uri"],
-        run_name=mlflow_params["run_name"],
-        log_model="all",
-    )
-
-
 def _setup_callbacks(trainer_params: Dict[str, Any]) -> List[Callback]:
     """Configures training callbacks."""
     checkpoint_callback = ModelCheckpoint(
@@ -129,18 +123,19 @@ def _setup_callbacks(trainer_params: Dict[str, Any]) -> List[Callback]:
     )
 
     lr_monitor = LearningRateMonitor(logging_interval="epoch")
-
     return [checkpoint_callback, early_stopping_callback, lr_monitor]
 
 
-def _setup_trainer(trainer_params: Dict[str, Any], logger: MLFlowLogger, callbacks: List[Callback]) -> pl.Trainer:
-    """Initializes the PyTorch Lightning trainer."""
+def _setup_trainer(
+    trainer_params: Dict[str, Any],
+    callbacks: List[Callback],
+) -> pl.Trainer:
+    """Initializes the PyTorch Lightning Trainer with the specified parameters and callbacks."""
     return pl.Trainer(
         max_epochs=trainer_params["max_epochs"],
         accelerator="gpu" if torch.cuda.is_available() else "cpu",
         devices=1,
         precision=trainer_params.get("precision", 32),
-        logger=logger,
         callbacks=callbacks,
         log_every_n_steps=trainer_params.get("log_every_n_steps", 10),
         accumulate_grad_batches=trainer_params.get("accumulate_grad_batches", 1),
@@ -149,53 +144,43 @@ def _setup_trainer(trainer_params: Dict[str, Any], logger: MLFlowLogger, callbac
     )
 
 
-def _log_best_checkpoint(logger: MLFlowLogger, checkpoint_callback: ModelCheckpoint) -> None:
-    """Logs the best model path and score to MLFlow."""
+def _log_best_checkpoint(checkpoint_callback: ModelCheckpoint) -> None:
     if checkpoint_callback.best_model_path:
-        logger.experiment.log_param(logger.run_id, "best_model_path", checkpoint_callback.best_model_path)
+        mlflow.log_param("best_model_path", checkpoint_callback.best_model_path)
+
     if checkpoint_callback.best_model_score is not None:
-        logger.experiment.log_metric(
-            logger.run_id, "best_model_score", float(checkpoint_callback.best_model_score.cpu().item())
+        mlflow.log_metric(
+            "best_model_score",
+            float(checkpoint_callback.best_model_score.cpu().item()),
         )
 
-
-def _log_test_metrics(logger: MLFlowLogger, test_results: Any) -> None:
-    """Logs final test metrics to MLFlow."""
-    if test_results and len(test_results) > 0:
-        for metric_name, metric_value in test_results[0].items():
-            logger.experiment.log_metric(logger.run_id, f"final_{metric_name}", float(metric_value))
+# def _log_test_metrics(test_results: Any) -> None:
+#     if test_results and len(test_results) > 0:
+#         mlflow.log_metrics(
+#             {f"final_{metric_name}": float(metric_value)
+#              for metric_name, metric_value in test_results[0].items()}
+#         )
 
 
 def train_model_node(
     datamodule: pl.LightningDataModule,
     lit_model: pl.LightningModule,
     trainer_params: Dict[str, Any],
-    mlflow_params: Dict[str, Any],
 ) -> pl.LightningModule:
     """Handles callbacks, loggers, fitting, testing, and metrics tracking."""
     torch.set_float32_matmul_precision("high")
 
-    logger = _setup_logger(mlflow_params)
     callbacks = _setup_callbacks(trainer_params)
+    trainer = _setup_trainer(trainer_params, callbacks)
 
-    trainer = _setup_trainer(trainer_params, logger, callbacks)
+    mlflow.log_params(trainer_params)
 
     datamodule.setup(stage="fit")
     trainer.fit(model=lit_model, datamodule=datamodule)
 
     checkpoint_callback = next(cb for cb in callbacks if isinstance(cb, ModelCheckpoint))
-    _log_best_checkpoint(logger, checkpoint_callback)
-
-    datamodule.setup(stage="test")
-    test_results = trainer.test(
-        model=lit_model,
-        datamodule=datamodule,
-        ckpt_path="best",
-    )
-
-    _log_test_metrics(logger, test_results)
+    _log_best_checkpoint(checkpoint_callback)
 
     print(f"Best checkpoint: {checkpoint_callback.best_model_path}")
-    print(f"Test results: {test_results}")
 
     return lit_model

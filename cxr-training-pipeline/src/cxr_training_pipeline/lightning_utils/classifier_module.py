@@ -91,36 +91,11 @@ class ClassifierModule(BaseClassifier):
             }
         )
 
-        # preds collection
-        pred_metrics_macro = MetricCollection(
-            {
-                "precision_macro": MultilabelPrecision(
-                    num_labels=num_classes, threshold=float(threshold), average="macro"
-                ),
-                "recall_macro": MultilabelRecall(num_labels=num_classes, threshold=float(threshold), average="macro"),
-                "f1_macro": MultilabelF1Score(num_labels=num_classes, threshold=float(threshold), average="macro"),
-            }
-        )
-
-        pred_metrics_micro = MetricCollection(
-            {
-                "precision_micro": MultilabelPrecision(
-                    num_labels=num_classes, threshold=float(threshold), average="micro"
-                ),
-                "recall_micro": MultilabelRecall(num_labels=num_classes, threshold=float(threshold), average="micro"),
-                "f1_micro": MultilabelF1Score(num_labels=num_classes, threshold=float(threshold), average="micro"),
-            }
-        )
-
         self.val_prob_metrics_macro = prob_metrics_macro.clone(prefix="val/")
         self.test_prob_metrics_macro = prob_metrics_macro.clone(prefix="test/")
         self.val_prob_metrics_micro = prob_metrics_micro.clone(prefix="val/")
         self.test_prob_metrics_micro = prob_metrics_micro.clone(prefix="test/")
 
-        self.val_pred_metrics_macro = pred_metrics_macro.clone(prefix="val/")
-        self.test_pred_metrics_macro = pred_metrics_macro.clone(prefix="test/")
-        self.val_pred_metrics_micro = pred_metrics_micro.clone(prefix="val/")
-        self.test_pred_metrics_micro = pred_metrics_micro.clone(prefix="test/")
 
     def forward(self, image, retain_transition_grad: bool = False):
         return self.model(image, retain_transition_grad=retain_transition_grad)
@@ -136,20 +111,24 @@ class ClassifierModule(BaseClassifier):
 
         self.thresholds.copy_(thresholds)
 
-    def _get_preds(self, probs: torch.Tensor) -> torch.Tensor:
-        thresholds = self.thresholds.view(1, -1).to(probs.device)
-        return (probs > thresholds).int()
-
-    def _shared_step(self, batch):
+    def _shared_inference(self, batch):
         image = batch["image"]
         target = batch["target"].float()
 
         out = self(image)
         logits = out["logits"]
         probs = torch.sigmoid(logits)
-        loss = self.criterion(logits, target)
 
-        return loss, probs, target, image.size(0)
+        return logits, probs, target
+
+    def _get_preds(self, probs: torch.Tensor) -> torch.Tensor:
+        thresholds = self.thresholds.view(1, -1).to(probs.device)
+        return (probs > thresholds).int()
+
+    def _shared_step(self, batch):
+        logits, probs, target = self._shared_inference(batch)
+        loss = self.criterion(logits, target)
+        return loss, probs, target, target.size(0)
 
     def training_step(self, batch, batch_idx):
         loss, _, _, batch_size = self._shared_step(batch)
@@ -160,77 +139,31 @@ class ClassifierModule(BaseClassifier):
     def validation_step(self, batch, batch_idx):
         loss, probs, target, batch_size = self._shared_step(batch)
         target_int = target.int()
-        preds = self._get_preds(probs)
 
         self.log("val/loss", loss, on_step=False, on_epoch=True, prog_bar=True, batch_size=batch_size)
-        self.log_dict(
-            self.val_prob_metrics_macro(probs, target_int),
-            on_step=False,
-            on_epoch=True,
-            prog_bar=True,
-            batch_size=batch_size,
-        )
-        self.log_dict(
-            self.val_prob_metrics_micro(probs, target_int),
-            on_step=False,
-            on_epoch=True,
-            prog_bar=False,
-            batch_size=batch_size,
-        )
-        self.log_dict(
-            self.val_pred_metrics_macro(preds, target_int),
-            on_step=False,
-            on_epoch=True,
-            prog_bar=True,
-            batch_size=batch_size,
-        )
-        self.log_dict(
-            self.val_pred_metrics_micro(preds, target_int),
-            on_step=False,
-            on_epoch=True,
-            prog_bar=False,
-            batch_size=batch_size,
-        )
-        return loss
+        self.log_dict(self.val_prob_metrics_macro(probs, target_int), on_step=False, on_epoch=True, prog_bar=True, batch_size=batch_size)
+        self.log_dict(self.val_prob_metrics_micro(probs, target_int), on_step=False, on_epoch=True, prog_bar=False, batch_size=batch_size)
+        return {"loss": loss.detach(), "probs": probs.detach(), "targets": target.detach()}
 
     def test_step(self, batch, batch_idx):
         loss, probs, target, batch_size = self._shared_step(batch)
         target_int = target.int()
-        preds = self._get_preds(probs)
 
         self.log("test/loss", loss, on_step=False, on_epoch=True, prog_bar=True, batch_size=batch_size)
-        self.log_dict(
-            self.test_prob_metrics_macro(probs, target_int),
-            on_step=False,
-            on_epoch=True,
-            prog_bar=True,
-            batch_size=batch_size,
-        )
-        self.log_dict(
-            self.test_prob_metrics_micro(probs, target_int),
-            on_step=False,
-            on_epoch=True,
-            prog_bar=False,
-            batch_size=batch_size,
-        )
-        self.log_dict(
-            self.test_pred_metrics_macro(preds, target_int),
-            on_step=False,
-            on_epoch=True,
-            prog_bar=True,
-            batch_size=batch_size,
-        )
-        self.log_dict(
-            self.test_pred_metrics_micro(preds, target_int),
-            on_step=False,
-            on_epoch=True,
-            prog_bar=False,
-            batch_size=batch_size,
-        )
-        return loss
+        self.log_dict(self.test_prob_metrics_macro(probs, target_int), on_step=False, on_epoch=True, prog_bar=True, batch_size=batch_size)
+        self.log_dict(self.test_prob_metrics_micro(probs, target_int), on_step=False, on_epoch=True, prog_bar=False, batch_size=batch_size)
+        return {"loss": loss.detach(), "probs": probs.detach(), "targets": target.detach()}
+
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        _, probs, target = self._shared_inference(batch)
+        preds = self._get_preds(probs)
+        return {
+            "probs": probs.detach().cpu(),
+            "preds": preds.detach().cpu(),
+            "targets": target.detach().cpu(),
+        }
 
     def configure_optimizers(self):
-
         optimizer = self.optimizer_class(
             filter(lambda p: p.requires_grad, self.parameters()),
             lr=self.hparams.lr,
@@ -240,10 +173,7 @@ class ClassifierModule(BaseClassifier):
         if self.scheduler_class is None:
             return optimizer
 
-        scheduler = self.scheduler_class(
-            optimizer,
-            **self.scheduler_kwargs,
-        )
+        scheduler = self.scheduler_class(optimizer, **self.scheduler_kwargs)
 
         if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
             return {
@@ -253,8 +183,4 @@ class ClassifierModule(BaseClassifier):
                     "monitor": "val/ap_macro",
                 },
             }
-        else:
-            return {
-                "optimizer": optimizer,
-                "lr_scheduler": scheduler,
-            }
+        return {"optimizer": optimizer, "lr_scheduler": scheduler}
