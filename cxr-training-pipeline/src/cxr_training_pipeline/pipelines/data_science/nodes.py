@@ -181,6 +181,40 @@ def train_model_node(
     checkpoint_callback = next(cb for cb in callbacks if isinstance(cb, ModelCheckpoint))
     _log_best_checkpoint(checkpoint_callback)
 
-    print(f"Best checkpoint: {checkpoint_callback.best_model_path}")
+    best_model_path = checkpoint_callback.best_model_path
+    print(f"Best checkpoint: {best_model_path}")
 
-    return lit_model
+    return best_model_path
+
+
+def predict_validation_node(
+    datamodule: pl.LightningDataModule,
+    lit_model: pl.LightningModule,
+    best_checkpoint_path: str,
+    trainer_params: Dict[str, Any],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Load the best checkpoint and create validation probabilities + targets."""
+    # Trainer without logger/checkpoints for inference
+    trainer = pl.Trainer(
+        accelerator=trainer_params.get("accelerator", "auto"),
+        devices=trainer_params.get("devices", "auto"),
+        precision=trainer_params.get("precision", "32-true"),
+        logger=False,
+        enable_checkpointing=False,
+    )
+
+    model_cls = lit_model.__class__
+    model = model_cls.load_from_checkpoint(
+        best_checkpoint_path,
+        model=lit_model.model,
+    )
+
+    datamodule.setup(stage="fit")
+    val_loader = datamodule.val_dataloader()
+
+    predictions = trainer.predict(model=model, dataloaders=val_loader)
+
+    y_proba = np.concatenate([batch["probs"].numpy() for batch in predictions], axis=0)
+    y_true = np.concatenate([batch["targets"].numpy() for batch in predictions], axis=0)
+
+    return y_proba, y_true

@@ -8,6 +8,7 @@ from .nodes import (
     build_classifier_node,
     build_lightning_module_node,
     train_model_node,
+    predict_validation_node,
 )
 
 
@@ -64,10 +65,20 @@ def create_pipeline(**kwargs) -> Pipeline:
                     "datamodule",
                     "lit_model",
                     "params:training.trainer",
-                    "params:training.mlflow",
                 ],
-                outputs="trained_model",
+                outputs="best_checkpoint_path",
                 name="train_model_node",
+            ),
+            Node(
+                func=predict_validation_node,
+                inputs=[
+                    "datamodule",
+                    "lit_model",
+                    "best_checkpoint_path",
+                    "params:training.trainer",
+                ],
+                outputs=["val_pred_proba", "val_targets"],
+                name="predict_validation_node",
             ),
         ]
     )
