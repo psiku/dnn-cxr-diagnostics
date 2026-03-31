@@ -131,11 +131,25 @@ def _setup_trainer(
     callbacks: List[Callback],
 ) -> pl.Trainer:
     """Initializes the PyTorch Lightning Trainer with the specified parameters and callbacks."""
+    active_run = mlflow.active_run()
+    mlflow_logger = (
+        MLFlowLogger(
+            tracking_uri=mlflow.get_tracking_uri(),
+            run_id=active_run.info.run_id,
+        )
+        if active_run is not None
+        else MLFlowLogger(
+            experiment_name=trainer_params.get("mlflow_experiment_name", "default"),
+            tracking_uri=mlflow.get_tracking_uri(),
+        )
+    )
+
     return pl.Trainer(
         max_epochs=trainer_params["max_epochs"],
         accelerator="gpu" if torch.cuda.is_available() else "cpu",
         devices=1,
         precision=trainer_params.get("precision", 32),
+        logger=mlflow_logger,
         callbacks=callbacks,
         log_every_n_steps=trainer_params.get("log_every_n_steps", 10),
         accumulate_grad_batches=trainer_params.get("accumulate_grad_batches", 1),
@@ -154,12 +168,28 @@ def _log_best_checkpoint(checkpoint_callback: ModelCheckpoint) -> None:
             float(checkpoint_callback.best_model_score.cpu().item()),
         )
 
-# def _log_test_metrics(test_results: Any) -> None:
-#     if test_results and len(test_results) > 0:
-#         mlflow.log_metrics(
-#             {f"final_{metric_name}": float(metric_value)
-#              for metric_name, metric_value in test_results[0].items()}
-#         )
+
+
+def _create_inference_trainer(trainer_params: Dict[str, Any]) -> pl.Trainer:
+    """Creates a lightweight Trainer without logging or checkpoints for inference."""
+    return pl.Trainer(
+        accelerator=trainer_params.get("accelerator", "auto"),
+        devices=trainer_params.get("devices", "auto"),
+        precision=trainer_params.get("precision", "32-true"),
+        logger=False,
+        enable_checkpointing=False,
+    )
+
+
+def _load_model_from_checkpoint(
+    lit_model: pl.LightningModule, best_checkpoint_path: str
+) -> pl.LightningModule:
+    """Loads a Lightning module from a checkpoint path using the original model class."""
+    model_cls = lit_model.__class__
+    return model_cls.load_from_checkpoint(
+        best_checkpoint_path,
+        model=lit_model.model,
+    )
 
 
 def train_model_node(
@@ -174,6 +204,7 @@ def train_model_node(
     trainer = _setup_trainer(trainer_params, callbacks)
 
     mlflow.log_params(trainer_params)
+    mlflow.pytorch.autolog()
 
     datamodule.setup(stage="fit")
     trainer.fit(model=lit_model, datamodule=datamodule)
@@ -184,9 +215,13 @@ def train_model_node(
     best_model_path = checkpoint_callback.best_model_path
     print(f"Best checkpoint: {best_model_path}")
 
+    datamodule.setup(stage="test")
+    trainer.test(model=lit_model, datamodule=datamodule, ckpt_path="best")
+
     return best_model_path
 
 
+# PREDICTIONS NODES
 def predict_validation_node(
     datamodule: pl.LightningDataModule,
     lit_model: pl.LightningModule,
@@ -194,27 +229,36 @@ def predict_validation_node(
     trainer_params: Dict[str, Any],
 ) -> tuple[np.ndarray, np.ndarray]:
     """Load the best checkpoint and create validation probabilities + targets."""
-    # Trainer without logger/checkpoints for inference
-    trainer = pl.Trainer(
-        accelerator=trainer_params.get("accelerator", "auto"),
-        devices=trainer_params.get("devices", "auto"),
-        precision=trainer_params.get("precision", "32-true"),
-        logger=False,
-        enable_checkpointing=False,
-    )
-
-    model_cls = lit_model.__class__
-    model = model_cls.load_from_checkpoint(
-        best_checkpoint_path,
-        model=lit_model.model,
-    )
+    trainer = _create_inference_trainer(trainer_params)
+    model = _load_model_from_checkpoint(lit_model, best_checkpoint_path)
 
     datamodule.setup(stage="fit")
     val_loader = datamodule.val_dataloader()
 
     predictions = trainer.predict(model=model, dataloaders=val_loader)
 
-    y_proba = np.concatenate([batch["probs"].numpy() for batch in predictions], axis=0)
-    y_true = np.concatenate([batch["targets"].numpy() for batch in predictions], axis=0)
+    y_proba = np.concatenate([batch["probs"].cpu().numpy() for batch in predictions], axis=0)
+    y_true = np.concatenate([batch["targets"].cpu().numpy() for batch in predictions], axis=0)
 
     return y_proba, y_true
+
+
+def predict_test_node(
+    datamodule: pl.LightningDataModule,
+    lit_model: pl.LightningModule,
+    best_checkpoint_path: str,
+    trainer_params: Dict[str, Any],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Load the best checkpoint and create test probabilities + targets."""
+    trainer = _create_inference_trainer(trainer_params)
+    model = _load_model_from_checkpoint(lit_model, best_checkpoint_path)
+
+    datamodule.setup(stage="test")
+    test_loader = datamodule.test_dataloader()
+
+    predictions = trainer.predict(model=model, dataloaders=test_loader)
+
+    test_pred_proba = np.concatenate([batch["probs"].cpu().numpy() for batch in predictions], axis=0)
+    test_targets = np.concatenate([batch["targets"].cpu().numpy() for batch in predictions], axis=0)
+
+    return test_pred_proba, test_targets
