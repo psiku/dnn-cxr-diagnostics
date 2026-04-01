@@ -66,3 +66,32 @@ best_thresholds:
 threshold_search_results:
   type: pandas.ParquetDataset
   filepath: data/08_reporting/threshold_search_results.parquet
+
+# best model and test results
+best_model:
+  type: pickle.PickleDataset
+  filepath: data/06_models/best_model.pkl
+
+test_pred_proba:
+  type: cxr_training_pipeline.extras.custom_kedro_dataset.numpy_memmap_dataset.NumpyMemmapDataset
+  filepath: data/08_reporting/test_pred_proba.npy
+
+test_targets:
+  type: cxr_training_pipeline.extras.custom_kedro_dataset.numpy_memmap_dataset.NumpyMemmapDataset
+  filepath: data/08_reporting/test_targets.npy
+
+test_metrics_default:
+  type: json.JSONDataset
+  filepath: data/08_reporting/test_metrics_default.json
+
+test_metrics_tuned:
+  type: json.JSONDataset
+  filepath: data/08_reporting/test_metrics_tuned.json
+
+test_metrics_comparison:
+  type: pandas.ParquetDataset
+  filepath: data/08_reporting/test_metrics_comparison.parquet
+
+test_per_class_comparison:
+  type: pandas.ParquetDataset
+  filepath: data/08_reporting/test_per_class_comparison.parquet

@@ -1,8 +1,8 @@
 import numpy as np
 from typing import Any, Dict, List
+from pathlib import Path
 from torchvision import transforms
 import pytorch_lightning as pl
-from pytorch_lightning.loggers import MLFlowLogger
 from lightning.pytorch.callbacks import (
     Callback,
     EarlyStopping,
@@ -13,6 +13,37 @@ import pandas as pd
 from cxr_training_pipeline.lightning_utils.factory import DataModuleFactory, ClassifierFactory, LightningModuleFactory
 import torch
 import mlflow
+
+
+class MlflowMetricLoggingCallback(Callback):
+    """Logs epoch metrics and learning rates to the active MLflow run."""
+
+    @staticmethod
+    def _log_callback_metrics(trainer: pl.Trainer) -> None:
+        active_run = mlflow.active_run()
+        if active_run is None:
+            return
+
+        step = int(trainer.current_epoch)
+        for metric_name, metric_value in trainer.callback_metrics.items():
+            if isinstance(metric_value, torch.Tensor):
+                metric_value = metric_value.detach().cpu().item()
+            if isinstance(metric_value, (int, float)):
+                mlflow.log_metric(metric_name, float(metric_value), step=step)
+
+    def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+        active_run = mlflow.active_run()
+        if active_run is not None:
+            step = int(trainer.current_epoch)
+            for opt_idx, optimizer in enumerate(trainer.optimizers):
+                for group_idx, param_group in enumerate(optimizer.param_groups):
+                    lr = param_group.get("lr")
+                    if lr is not None:
+                        mlflow.log_metric(f"lr/opt{opt_idx}_group{group_idx}", float(lr), step=step)
+        self._log_callback_metrics(trainer)
+
+    def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+        self._log_callback_metrics(trainer)
 
 
 # DATA PREPARATION NODE
@@ -107,8 +138,11 @@ def build_lightning_module_node(model: torch.nn.Module, lit_params: Dict[str, An
 # TRAINING NODE
 def _setup_callbacks(trainer_params: Dict[str, Any]) -> List[Callback]:
     """Configures training callbacks."""
+    checkpoint_dir = Path(trainer_params.get("checkpoint_dir", "checkpoints")).resolve()
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
     checkpoint_callback = ModelCheckpoint(
-        dirpath="checkpoints",
+        dirpath=str(checkpoint_dir),
         filename="best-{epoch:02d}-{val_ap_macro:.4f}",
         monitor="val/ap_macro",
         mode="max",
@@ -122,8 +156,9 @@ def _setup_callbacks(trainer_params: Dict[str, Any]) -> List[Callback]:
         patience=trainer_params.get("patience", 5),
     )
 
-    lr_monitor = LearningRateMonitor(logging_interval="epoch")
-    return [checkpoint_callback, early_stopping_callback, lr_monitor]
+    callbacks: List[Callback] = [checkpoint_callback, early_stopping_callback]
+    callbacks.append(MlflowMetricLoggingCallback())
+    return callbacks
 
 
 def _setup_trainer(
@@ -131,25 +166,13 @@ def _setup_trainer(
     callbacks: List[Callback],
 ) -> pl.Trainer:
     """Initializes the PyTorch Lightning Trainer with the specified parameters and callbacks."""
-    active_run = mlflow.active_run()
-    mlflow_logger = (
-        MLFlowLogger(
-            tracking_uri=mlflow.get_tracking_uri(),
-            run_id=active_run.info.run_id,
-        )
-        if active_run is not None
-        else MLFlowLogger(
-            experiment_name=trainer_params.get("mlflow_experiment_name", "default"),
-            tracking_uri=mlflow.get_tracking_uri(),
-        )
-    )
-
     return pl.Trainer(
         max_epochs=trainer_params["max_epochs"],
+        default_root_dir=str(Path.cwd().resolve()),
         accelerator="gpu" if torch.cuda.is_available() else "cpu",
         devices=1,
         precision=trainer_params.get("precision", 32),
-        logger=mlflow_logger,
+        logger=False,
         callbacks=callbacks,
         log_every_n_steps=trainer_params.get("log_every_n_steps", 10),
         accumulate_grad_batches=trainer_params.get("accumulate_grad_batches", 1),
@@ -204,7 +227,6 @@ def train_model_node(
     trainer = _setup_trainer(trainer_params, callbacks)
 
     mlflow.log_params(trainer_params)
-    mlflow.pytorch.autolog()
 
     datamodule.setup(stage="fit")
     trainer.fit(model=lit_model, datamodule=datamodule)

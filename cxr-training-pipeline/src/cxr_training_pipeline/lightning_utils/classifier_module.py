@@ -141,8 +141,13 @@ class ClassifierModule(BaseClassifier):
         target_int = target.int()
 
         self.log("val/loss", loss, on_step=False, on_epoch=True, prog_bar=True, batch_size=batch_size)
-        self.log_dict(self.val_prob_metrics_macro(probs, target_int), on_step=False, on_epoch=True, prog_bar=True, batch_size=batch_size)
-        self.log_dict(self.val_prob_metrics_micro(probs, target_int), on_step=False, on_epoch=True, prog_bar=False, batch_size=batch_size)
+
+        self.val_prob_metrics_macro.update(probs, target_int)
+        self.val_prob_metrics_micro.update(probs, target_int)
+
+        self.log_dict(self.val_prob_metrics_macro, on_step=False, on_epoch=True, prog_bar=True)
+        self.log_dict(self.val_prob_metrics_micro, on_step=False, on_epoch=True, prog_bar=False)
+
         return {"loss": loss.detach(), "probs": probs.detach(), "targets": target.detach()}
 
     def test_step(self, batch, batch_idx):
@@ -150,8 +155,13 @@ class ClassifierModule(BaseClassifier):
         target_int = target.int()
 
         self.log("test/loss", loss, on_step=False, on_epoch=True, prog_bar=True, batch_size=batch_size)
-        self.log_dict(self.test_prob_metrics_macro(probs, target_int), on_step=False, on_epoch=True, prog_bar=True, batch_size=batch_size)
-        self.log_dict(self.test_prob_metrics_micro(probs, target_int), on_step=False, on_epoch=True, prog_bar=False, batch_size=batch_size)
+
+        self.test_prob_metrics_macro.update(probs, target_int)
+        self.test_prob_metrics_micro.update(probs, target_int)
+
+        self.log_dict(self.test_prob_metrics_macro, on_step=False, on_epoch=True, prog_bar=True)
+        self.log_dict(self.test_prob_metrics_micro, on_step=False, on_epoch=True, prog_bar=False)
+
         return {"loss": loss.detach(), "probs": probs.detach(), "targets": target.detach()}
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):

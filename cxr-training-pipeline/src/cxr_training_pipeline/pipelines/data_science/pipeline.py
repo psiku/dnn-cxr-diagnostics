@@ -9,6 +9,7 @@ from .nodes import (
     build_lightning_module_node,
     train_model_node,
     predict_validation_node,
+    predict_test_node,
 )
 
 
@@ -79,6 +80,17 @@ def create_pipeline(**kwargs) -> Pipeline:
                 ],
                 outputs=["val_pred_proba", "val_targets"],
                 name="predict_validation_node",
+            ),
+            Node(
+                func=predict_test_node,
+                inputs=[
+                    "datamodule",
+                    "lit_model",
+                    "best_checkpoint_path",
+                    "params:training.trainer",
+                ],
+                outputs=["test_pred_proba", "test_targets"],
+                name="predict_test_node",
             ),
         ]
     )

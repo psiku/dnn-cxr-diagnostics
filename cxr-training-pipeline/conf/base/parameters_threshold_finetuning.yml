@@ -2,3 +2,4 @@ threshold_tuning:
   start: 0.01
   stop: 1.00
   step: 0.01
+  default_threshold: 0.5

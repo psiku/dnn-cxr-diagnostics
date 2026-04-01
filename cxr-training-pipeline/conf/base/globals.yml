@@ -1,3 +1,6 @@
 # Global parameters for precomputing data
 resize: 224
 precomputed_root: data/02_intermediate/precomputed
+
+# MLflow experiment name
+mlflow_experiment_name: "cxr-classification-paper-resnet50"
