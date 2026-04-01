@@ -16,13 +16,25 @@ def predict(model, image_tensor):
     return probs
 
 
-def build_predictions_df(probs, real_targets):
+def build_predictions_df(probs, real_targets, threshold: list[float] | float | dict = 0.5):
+    if isinstance(threshold, dict):
+        threshold = [float(threshold.get(d, 0.5)) for d in DISEASES]
+    elif isinstance(threshold, float):
+        threshold = [threshold] * len(DISEASES)
+    elif isinstance(threshold, list):
+        if len(threshold) != len(DISEASES):
+            raise ValueError(f"Threshold list must have {len(DISEASES)} values.")
+        threshold = [float(t) for t in threshold]
+
     return (
-        pd.DataFrame({
-            "Disease": DISEASES,
-            "Probability": probs,
-            "Is Target": [1 if d in real_targets else 0 for d in DISEASES],
-        })
+        pd.DataFrame(
+            {
+                "Disease": DISEASES,
+                "Probability": probs,
+                "Predicted Target": probs >= threshold,
+                "Is Target": [1 if d in real_targets else 0 for d in DISEASES],
+            }
+        )
         .sort_values(by="Probability", ascending=False)
         .reset_index(drop=True)
     )
