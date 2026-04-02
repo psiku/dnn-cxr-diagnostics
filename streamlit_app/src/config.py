@@ -13,6 +13,7 @@ for path in (ROOT_DIR, KEDRO_ROOT, KEDRO_SRC_DIR, STREAMLIT_ROOT):
 
 DATA_DIR = KEDRO_ROOT / "data"
 REPORTING_DIR = DATA_DIR / "08_reporting"
+MODEL_OUTPUTS_DIR = DATA_DIR / "07_model_output"
 BEST_THRESHOLDS_PATH = REPORTING_DIR / "best_thresholds.json"
 IMAGES_DIR = DATA_DIR / "01_raw" / "images"
 TRAIN_VAL_CSV = DATA_DIR / "02_intermediate" / "dataset_splits" / "train_val.csv"

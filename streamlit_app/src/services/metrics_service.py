@@ -16,6 +16,10 @@ from src.constants import DISEASES
 from src.services.model_service import _load_thresholds
 
 
+def get_project_name(model_output_dir: Path) -> str:
+    return [p.name for p in model_output_dir.iterdir() if p.is_dir()]
+
+
 def _load_file(path: Path) -> Any:
     if not path.exists():
         raise FileNotFoundError(f"Metric file not found: {path}")

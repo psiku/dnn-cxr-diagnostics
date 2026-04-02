@@ -1,22 +1,28 @@
 import streamlit as st
 import pandas as pd
 
-from src.config import REPORTING_DIR
-from src.services.metrics_service import _calculate_metrics, _style_best_micro_macro
+from src.config import MODEL_OUTPUTS_DIR, REPORTING_DIR
+from src.services.metrics_service import _calculate_metrics, _style_best_micro_macro, get_project_name
 
 st.set_page_config(page_title="Model Statistics", layout="wide")
 st.title("Model Statistics")
 
 
 def main():
-    reporting = REPORTING_DIR
-    val_proba_path = reporting / "val_pred_proba.npy"
-    val_targets_path = reporting / "val_targets.npy"
+    project_names = get_project_name(MODEL_OUTPUTS_DIR)
 
-    test_proba_path = reporting / "test_pred_proba.npy"
-    test_targets_path = reporting / "test_targets.npy"
+    project_name = st.selectbox(
+        "Select model project",
+        options=project_names,
+    )
 
-    threshold_path = reporting / "best_thresholds.json"
+    val_proba_path = MODEL_OUTPUTS_DIR / project_name / "val_pred_proba.npy"
+    val_targets_path = MODEL_OUTPUTS_DIR / project_name / "val_targets.npy"
+
+    test_proba_path = MODEL_OUTPUTS_DIR / project_name / "test_pred_proba.npy"
+    test_targets_path = MODEL_OUTPUTS_DIR / project_name / "test_targets.npy"
+
+    threshold_path = REPORTING_DIR / project_name / "best_thresholds.json"
 
     val_summary_metrics, val_per_class_metrics = _calculate_metrics(
         val_proba_path, val_targets_path, threshold_path

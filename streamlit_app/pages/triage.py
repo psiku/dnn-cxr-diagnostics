@@ -30,7 +30,7 @@ st.header("Triage Settings")
 selected_model = st.selectbox(
     "Model checkpoint",
     options=available_models,
-    format_func=lambda p: p.name,
+    format_func=lambda p: f"{p.parent.parent.name}-{p.stem}",
 )
 
 threshold_values = _load_thresholds(BEST_THRESHOLDS_PATH)
