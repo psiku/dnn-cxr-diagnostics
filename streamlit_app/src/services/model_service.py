@@ -15,12 +15,14 @@ def _resolve_checkpoint_path(checkpoint_path: str | Path | None = None) -> Path:
     return ckpt
 
 
-def list_saved_models() -> list[Path]:
-    checkpoints_dir = (KEDRO_ROOT / "checkpoints").resolve()
+def list_saved_models():
+    checkpoints_dir = (KEDRO_ROOT / "data" / "06_models").resolve()
+
     if not checkpoints_dir.exists():
         return []
-    return sorted(checkpoints_dir.glob("*.ckpt"), key=lambda p: p.stat().st_mtime, reverse=True)
 
+    checkpoints = [p for p in checkpoints_dir.rglob("*.ckpt") if p.is_file()]
+    return sorted(checkpoints, reverse=True)
 
 def _load_thresholds(path: Path | None) -> dict[str, float]:
     if path is None:

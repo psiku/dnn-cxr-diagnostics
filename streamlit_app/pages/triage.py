@@ -35,11 +35,34 @@ selected_model = st.selectbox(
 
 threshold_values = _load_thresholds(BEST_THRESHOLDS_PATH)
 
+if "all_diseases_selected" not in st.session_state:
+    st.session_state.all_diseases_selected = False
+
+if "selected_diseases" not in st.session_state:
+    st.session_state.selected_diseases = []
+
+
+def toggle_all_diseases():
+    st.session_state.all_diseases_selected = not st.session_state.all_diseases_selected
+
+    if st.session_state.all_diseases_selected:
+        st.session_state.selected_diseases = DISEASES[:]
+    else:
+        st.session_state.selected_diseases = []
+
+
+st.button(
+    "Select all / Unselect all",
+    on_click=toggle_all_diseases,
+)
+
 selected_diseases = st.pills(
     "Diseases to classify",
     options=DISEASES,
     selection_mode="multi",
+    key="selected_diseases",
 )
+
 
 if not selected_diseases:
     st.warning("Select at least one disease.")
