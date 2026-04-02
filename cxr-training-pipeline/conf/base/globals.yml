@@ -4,3 +4,4 @@ precomputed_root: data/02_intermediate/precomputed
 
 # MLflow experiment name
 mlflow_experiment_name: "cxr-classification-paper-resnet50"
+run_name: "resnet50_224_40_epochs"

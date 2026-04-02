@@ -49,49 +49,49 @@ test_labels_npy:
 # model, valus for defaultthresholds, and threshold search results
 best_checkpoint_path:
   type: text.TextDataset
-  filepath: data/06_models/best_checkpoint_path.txt
+  filepath: data/06_models/${globals:mlflow_experiment_name}/${globals:run_name}/best_checkpoint_path.txt
 
 val_pred_proba:
   type: cxr_training_pipeline.extras.custom_kedro_dataset.numpy_memmap_dataset.NumpyMemmapDataset
-  filepath: data/08_reporting/val_pred_proba.npy
+  filepath: data/07_models_output/${globals:mlflow_experiment_name}/${globals:run_name}/val_pred_proba.npy
 
 val_targets:
   type: cxr_training_pipeline.extras.custom_kedro_dataset.numpy_memmap_dataset.NumpyMemmapDataset
-  filepath: data/08_reporting/val_targets.npy
+  filepath: data/07_models_output/${globals:mlflow_experiment_name}/${globals:run_name}/val_targets.npy
 
 best_thresholds:
   type: json.JSONDataset
-  filepath: data/08_reporting/best_thresholds.json
+  filepath: data/08_reporting/${globals:mlflow_experiment_name}/${globals:run_name}/best_thresholds.json
 
 threshold_search_results:
   type: pandas.ParquetDataset
-  filepath: data/08_reporting/threshold_search_results.parquet
+  filepath: data/08_reporting/${globals:mlflow_experiment_name}/${globals:run_name}/threshold_search_results.parquet
 
 # best model and test results
 best_model:
   type: pickle.PickleDataset
-  filepath: data/06_models/best_model.pkl
+  filepath: data/06_models/${globals:mlflow_experiment_name}/${globals:run_name}/best_model.pkl
 
 test_pred_proba:
   type: cxr_training_pipeline.extras.custom_kedro_dataset.numpy_memmap_dataset.NumpyMemmapDataset
-  filepath: data/08_reporting/test_pred_proba.npy
+  filepath: data/07_models_output/${globals:mlflow_experiment_name}/${globals:run_name}/test_pred_proba.npy
 
 test_targets:
   type: cxr_training_pipeline.extras.custom_kedro_dataset.numpy_memmap_dataset.NumpyMemmapDataset
-  filepath: data/08_reporting/test_targets.npy
+  filepath: data/07_models_output/${globals:mlflow_experiment_name}/${globals:run_name}/test_targets.npy
 
 test_metrics_default:
   type: json.JSONDataset
-  filepath: data/08_reporting/test_metrics_default.json
+  filepath: data/08_reporting/${globals:mlflow_experiment_name}/${globals:run_name}/test_metrics_default.json
 
 test_metrics_tuned:
   type: json.JSONDataset
-  filepath: data/08_reporting/test_metrics_tuned.json
+  filepath: data/08_reporting/${globals:mlflow_experiment_name}/${globals:run_name}/test_metrics_tuned.json
 
 test_metrics_comparison:
   type: pandas.ParquetDataset
-  filepath: data/08_reporting/test_metrics_comparison.parquet
+  filepath: data/08_reporting/${globals:mlflow_experiment_name}/${globals:run_name}/test_metrics_comparison.parquet
 
 test_per_class_comparison:
   type: pandas.ParquetDataset
-  filepath: data/08_reporting/test_per_class_comparison.parquet
+  filepath: data/08_reporting/${globals:mlflow_experiment_name}/${globals:run_name}/test_per_class_comparison.parquet

@@ -16,8 +16,18 @@ from src.constants import DISEASES
 from src.services.model_service import _load_thresholds
 
 
-def get_project_name(model_output_dir: Path) -> str:
-    return [p.name for p in model_output_dir.iterdir() if p.is_dir()]
+def get_project_name(model_output_dir: Path) -> list[str]:
+    projects: list[str] = []
+
+    for experiment_dir in model_output_dir.iterdir():
+        if not experiment_dir.is_dir():
+            continue
+
+        run_dirs = [p for p in experiment_dir.iterdir() if p.is_dir()]
+        for run_dir in run_dirs:
+            projects.append(f"{experiment_dir.name}/{run_dir.name}")
+
+    return sorted(projects)
 
 
 def _load_file(path: Path) -> Any:
