@@ -6,7 +6,6 @@ import pytorch_lightning as pl
 from lightning.pytorch.callbacks import (
     Callback,
     EarlyStopping,
-    LearningRateMonitor,
     ModelCheckpoint,
 )
 import pandas as pd
@@ -138,12 +137,13 @@ def build_lightning_module_node(model: torch.nn.Module, lit_params: Dict[str, An
 # TRAINING NODE
 def _setup_callbacks(trainer_params: Dict[str, Any]) -> List[Callback]:
     """Configures training callbacks."""
-    checkpoint_dir = Path(trainer_params.get("checkpoint_dir", "checkpoints")).resolve()
+    experiment_name = trainer_params.get("mlflow_experiment_name", "default_experiment")
+    checkpoint_dir = Path("data/06_models") / experiment_name / "checkpoints"
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
     checkpoint_callback = ModelCheckpoint(
         dirpath=str(checkpoint_dir),
-        filename="best-{epoch:02d}-{val_ap_macro:.4f}",
+        filename="best-{epoch:02d}",
         monitor="val/ap_macro",
         mode="max",
         save_top_k=1,
@@ -190,7 +190,6 @@ def _log_best_checkpoint(checkpoint_callback: ModelCheckpoint) -> None:
             "best_model_score",
             float(checkpoint_callback.best_model_score.cpu().item()),
         )
-
 
 
 def _create_inference_trainer(trainer_params: Dict[str, Any]) -> pl.Trainer:

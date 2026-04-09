@@ -7,6 +7,10 @@ cxr8_bbox:
   type: pandas.CSVDataset
   filepath: data/01_raw/BBox_List_2017.csv
 
+cxr8_segmentation_masks:
+  type: pandas.CSVDataset
+  filepath: data/01_raw/ChestX-Ray8.csv
+
 cxr8_train_val_list:
   type: text.TextDataset
   filepath: data/01_raw/train_val_list.txt
