@@ -1,6 +1,10 @@
 from kedro.pipeline import Node, Pipeline
 
-from .nodes import create_train_val_test_dfs, precompute_labels, precompute_images_to_npy
+from .nodes import (
+    create_train_val_test_dfs,
+    precompute_images_to_npy,
+    precompute_labels,
+)
 
 
 def create_pipeline(**kwargs) -> Pipeline:
@@ -30,7 +34,6 @@ def create_pipeline(**kwargs) -> Pipeline:
                     "params:data_processing_transforms",
                     "params:data_processing_precompute.image_size",
                     "params:data_processing_precompute.image_col",
-
                 ],
                 outputs=None,
                 name="precompute_images_to_npy_node",
