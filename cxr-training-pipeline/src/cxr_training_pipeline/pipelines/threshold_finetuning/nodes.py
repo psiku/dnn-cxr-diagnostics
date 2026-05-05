@@ -6,9 +6,9 @@ from tqdm import tqdm
 
 
 def _binary_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
-    precision = precision_score(y_true, y_pred, zero_division=0.0, average="macro")
-    recall = recall_score(y_true, y_pred, zero_division=0.0, average="macro")
-    f1 = f1_score(y_true, y_pred, zero_division=0.0, average="macro")
+    precision = precision_score(y_true, y_pred, zero_division=0.0, average="binary")
+    recall = recall_score(y_true, y_pred, zero_division=0.0, average="binary")
+    f1 = f1_score(y_true, y_pred, zero_division=0.0, average="binary")
     return {"precision": precision, "recall": recall, "f1": f1}
 
 
