@@ -1,17 +1,22 @@
 from io import BytesIO
+
 import streamlit as st
 from PIL import Image
 
 from src.constants import DISEASES
-from src.config import BEST_THRESHOLDS_PATH
 from src.services.data_service import get_row_by_image_index, load_data
 from src.services.inference_service import (
     build_predictions_df,
-    generate_cam,
+    generate_weighted_cam,
     get_real_targets,
     predict,
 )
-from src.services.model_service import list_saved_models, load_model, _load_thresholds
+from src.services.model_service import (
+    _load_thresholds,
+    find_thresholds_for_checkpoint,
+    list_saved_models,
+    load_model,
+)
 from src.utils.preprocessing import prepare_image_tensor
 from src.utils.visualization import generate_heatmap_overlay
 
@@ -22,18 +27,32 @@ st.title("Triage")
 
 available_models = list_saved_models()
 if not available_models:
-    st.error("No saved models found in `cxr-training-pipeline/checkpoints`.")
+    st.error("No saved models found in `cxr-training-pipeline/data/06_models`.")
     st.stop()
 
 
+# Settings: model + threshold source
+
 st.header("Triage Settings")
+
 selected_model = st.selectbox(
     "Model checkpoint",
     options=available_models,
     format_func=lambda p: f"{p.parent.parent.parent.name}-{p.parent.parent.name}-{p.stem}",
 )
 
-threshold_values = _load_thresholds(BEST_THRESHOLDS_PATH)
+thresholds_path = find_thresholds_for_checkpoint(selected_model)
+threshold_values = _load_thresholds(thresholds_path)
+
+with st.expander("Loaded thresholds", expanded=False):
+    if thresholds_path is not None:
+        st.caption(f"Source: `{thresholds_path}`")
+    else:
+        st.caption("No matching `best_thresholds.json` found - using 0.5 for every disease.")
+    st.json({d: threshold_values.get(d, 0.5) for d in DISEASES})
+
+
+# Disease selection (filters the predictions table)
 
 if "all_diseases_selected" not in st.session_state:
     st.session_state.all_diseases_selected = False
@@ -51,10 +70,7 @@ def toggle_all_diseases():
         st.session_state.selected_diseases = []
 
 
-st.button(
-    "Select all / Unselect all",
-    on_click=toggle_all_diseases,
-)
+st.button("Select all / Unselect all", on_click=toggle_all_diseases)
 
 selected_diseases = st.pills(
     "Diseases to classify",
@@ -63,11 +79,13 @@ selected_diseases = st.pills(
     key="selected_diseases",
 )
 
-
 if not selected_diseases:
     st.warning("Select at least one disease.")
     st.stop()
 
+
+
+# Image upload + inference
 uploaded = st.file_uploader("Drop chest X-ray image", type=["png", "jpg", "jpeg"])
 if uploaded is None:
     st.info("Upload an image to run triage.")
@@ -76,7 +94,6 @@ if uploaded is None:
 uploaded_bytes = uploaded.getvalue()
 img_pil = Image.open(BytesIO(uploaded_bytes)).convert("RGB")
 
-# save for other page
 st.session_state["labeling_image_bytes"] = uploaded_bytes
 st.session_state["labeling_image_name"] = uploaded.name
 
@@ -93,21 +110,26 @@ else:
 
 try:
     model = load_model(selected_model)
-    image_tensor = prepare_image_tensor(img_pil)
+    channels = 1 if getattr(model, "grayscale", False) else 3
+    image_tensor = prepare_image_tensor(img_pil, channels=channels)
     probs = predict(model, image_tensor)
     preds_df = build_predictions_df(probs, real_targets, threshold=threshold_values)
 except Exception as e:
     st.error(f"Inference failed: {e}")
     st.stop()
 
-preds_filtered = preds_df[preds_df["Disease"].isin(selected_diseases)].copy()
-preds_filtered = preds_filtered.sort_values("Probability", ascending=False).reset_index(drop=True)
+preds_filtered = (
+    preds_df[preds_df["Disease"].isin(selected_diseases)]
+    .sort_values("Probability", ascending=False)
+    .reset_index(drop=True)
+)
 
 
 if st.button("Add Bounding Box"):
     st.switch_page("pages/labeling.py")
 
 
+# Original image + probability-weighted Grad-CAM
 col_original, col_gradcam = st.columns(2)
 with col_original:
     st.subheader("Original image")
@@ -115,17 +137,7 @@ with col_original:
 with col_gradcam:
     st.subheader("Grad-CAM")
     with st.spinner("Generating probability-weighted Grad-CAM..."):
-        combined_cam = None
-        eps = 1e-8
-        for disease, prob in zip(DISEASES, probs):
-            class_idx = DISEASES.index(disease)
-            class_cam = generate_cam(model, image_tensor, class_idx)
-            weighted_cam = class_cam * float(prob)
-            if combined_cam is None:
-                combined_cam = weighted_cam
-            else:
-                combined_cam += weighted_cam
-        combined_cam = combined_cam / (combined_cam.max() + eps)
+        combined_cam = generate_weighted_cam(model, image_tensor, probs)
         _, overlay = generate_heatmap_overlay(
             img_pil,
             combined_cam,
@@ -137,6 +149,8 @@ with col_gradcam:
         width=800,
     )
 
+
+# Summary table
 if has_ground_truth:
     gt_label = ", ".join(real_targets) if real_targets else "(no positive labels)"
     st.markdown("**Ground truth labels:** " + gt_label)

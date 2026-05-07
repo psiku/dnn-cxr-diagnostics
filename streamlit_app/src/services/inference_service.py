@@ -1,5 +1,7 @@
-import torch
+import numpy as np
 import pandas as pd
+import torch
+import torch.nn.functional as F
 
 from src.constants import DISEASES
 
@@ -43,3 +45,17 @@ def build_predictions_df(probs, real_targets, threshold: list[float] | float | d
 def generate_cam(model, image_tensor, class_idx):
     cam_tensor, _ = model.cam(image_tensor, class_idx)
     return cam_tensor[0].cpu().numpy()
+
+
+@torch.no_grad()
+def generate_weighted_cam(model, image_tensor, probs) -> np.ndarray:
+    """Probability-weighted CAM in a single forward pass."""
+    model.eval()
+    out = model.forward(image_tensor, retain_transition_grad=False)
+    transition_maps = out["transition_maps"]
+    p = torch.as_tensor(probs, dtype=transition_maps.dtype, device=transition_maps.device)
+    combined_weights = p @ model.prediction.weight
+    cam = torch.einsum("d,bdhw->bhw", combined_weights, transition_maps)
+    cam = F.relu(cam)
+    cam = model._normalize_map(cam)
+    return cam[0].cpu().numpy()
