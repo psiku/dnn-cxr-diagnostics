@@ -18,7 +18,7 @@ def create_pipeline(**kwargs) -> Pipeline:
         [
             Node(
                 func=make_train_val_indices,
-                inputs=["xray_train_val", "params:training.split"],
+                inputs=["tensor_train_val_dataset", "params:training.split"],
                 outputs=["train_idx", "val_idx"],
                 name="make_train_val_indices_node",
             ),
@@ -31,8 +31,8 @@ def create_pipeline(**kwargs) -> Pipeline:
             Node(
                 func=prepare_datamodule_config,
                 inputs=[
-                    "xray_train_val",
-                    "xray_test",
+                    "tensor_train_val_dataset",
+                    "tensor_test_dataset",
                     "train_idx",
                     "val_idx",
                     "train_tfms",

@@ -24,19 +24,11 @@ data_processing:
 
   ohe_column: "finding_labels"
 
-
-data_processing_transforms:
-  resize: ${globals:resize}
-  grayscale: true
-  center_crop: 224
-  normalize:
-    mean: [0.5]
-    std: [0.5]
-
-
 data_processing_precompute:
   images_dir: data/01_raw/images
-  train_val_output_path: ${globals:precomputed_root}/${globals:resize}/train_images.npy
-  test_output_path: ${globals:precomputed_root}/${globals:resize}/test_images.npy
+  out_dir_full: data/05_model_input/tensor_full_${globals:resize}
+  out_dir_crop: data/05_model_input/tensor_cropped_${globals:resize}
+  out_dir_mask: data/05_model_input/masks_cropped_${globals:resize}
   image_size: ${globals:resize}
-  image_col: "image_index"
+  compute_tensors: false
+  image_type: "full" # Options: "full", "cropped", "cropped_with_mask"

@@ -3,13 +3,11 @@ from torch import nn
 from abc import ABC, abstractmethod
 import torch
 import pytorch_lightning as pl
+from collections.abc import Mapping
 from torchmetrics import MetricCollection
 from torchmetrics.classification import (
     MultilabelAUROC,
     MultilabelAveragePrecision,
-    MultilabelF1Score,
-    MultilabelPrecision,
-    MultilabelRecall,
 )
 
 
@@ -98,7 +96,29 @@ class ClassifierModule(BaseClassifier):
 
 
     def forward(self, image, retain_transition_grad: bool = False):
-        return self.model(image, retain_transition_grad=retain_transition_grad)
+        # Some backbones expose retain_transition_grad (e.g. ChestXRayClassifier),
+        # while simpler models accept only the image tensor.
+        try:
+            return self.model(image, retain_transition_grad=retain_transition_grad)
+        except TypeError as exc:
+            if "retain_transition_grad" not in str(exc):
+                raise
+            return self.model(image)
+
+    @staticmethod
+    def _extract_logits(model_output):
+        if isinstance(model_output, torch.Tensor):
+            return model_output
+
+        if isinstance(model_output, Mapping):
+            logits = model_output.get("logits")
+            if isinstance(logits, torch.Tensor):
+                return logits
+            raise TypeError("Model output mapping must contain tensor under key 'logits'.")
+
+        raise TypeError(
+            "Model output must be either a logits tensor or a mapping containing 'logits'."
+        )
 
     def set_thresholds(self, thresholds: torch.Tensor):
         thresholds = torch.as_tensor(thresholds, dtype=torch.float32, device=self.device)
@@ -116,7 +136,7 @@ class ClassifierModule(BaseClassifier):
         target = batch["target"].float()
 
         out = self(image)
-        logits = out["logits"]
+        logits = self._extract_logits(out)
         probs = torch.sigmoid(logits)
 
         return logits, probs, target

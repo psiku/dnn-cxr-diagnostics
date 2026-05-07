@@ -5,9 +5,20 @@ import numpy as np
 from pathlib import Path
 from PIL import Image
 from tqdm import tqdm
+import os
+import torch
+from torchvision.transforms import v2
+from cxr_training_pipeline.utils.segmentation_utils import (
+    get_combined_mask_by_image_index,
+    get_bbox_coordinates,
+    expand_bbox,
+)
 
-
-
+# const transform
+to_tensor = v2.Compose([
+    v2.ToImage(),
+    v2.ToDtype(torch.float32, scale=True)
+])
 
 # Creating the dataframes with only the necessary columns and one-hot encoding the labels
 def _clean_dataframe(df: pd.DataFrame, columns_to_keep: list[str]) -> pd.DataFrame:
@@ -58,141 +69,180 @@ def create_train_val_test_dfs(
     return train_val_df, test_df
 
 
-# Precomputing images to npy files for faster loading during training
-def _build_transform_from_config(config: dict[str, Any]) -> transforms.Compose:
-    steps = []
+def _get_cropped_arrays(image_path: str, image_index: str, masks_df: pd.DataFrame):
+    """
+    Helper function to load an image, get the combined mask, compute the bounding box, and return the cropped image and mask arrays.
+    """
+    img_pil = Image.open(image_path).convert("RGB")
+    img_np = np.array(img_pil)
+    height, width = img_np.shape[:2]
 
-    if config.get("grayscale", True):
-        steps.append(transforms.Grayscale(num_output_channels=1))
+    combined_mask = get_combined_mask_by_image_index(
+        image_index=image_index,
+        segmentation_masks_df=masks_df,
+        height=height,
+        width=width
+    )
 
-    if "resize" in config and config["resize"] is not None:
-        resize_value = config["resize"]
-        if isinstance(resize_value, (list, tuple)):
-            steps.append(transforms.Resize(tuple(resize_value)))
-        else:
-            steps.append(transforms.Resize(resize_value))
+    bbox = get_bbox_coordinates(combined_mask)
 
-    if "center_crop" in config and config["center_crop"] is not None:
-        steps.append(transforms.CenterCrop(config["center_crop"]))
+    if bbox is not None:
+        bbox = expand_bbox(bbox, img_shape=(height, width), margin_ratio=0.01)
+        x_min, y_min, x_max, y_max = bbox
 
-    steps.append(transforms.ToTensor())  # [1, H, W], float in [0,1]
+        cropped_img_np = img_np[y_min:y_max, x_min:x_max]
+        cropped_mask_np = combined_mask[y_min:y_max, x_min:x_max]
+    else:
+        cropped_img_np = img_np
+        cropped_mask_np = combined_mask
 
-    if "normalize" in config and config["normalize"] is not None:
-        norm_cfg = config["normalize"]
-        steps.append(
-            transforms.Normalize(
-                mean=norm_cfg["mean"],
-                std=norm_cfg["std"],
-            )
-        )
-
-    return transforms.Compose(steps)
+    return cropped_img_np, cropped_mask_np
 
 
-def _precompute_images_to_npy(
+def _create_cropped_image_tensor(image_path: str, image_index: str, masks_df: pd.DataFrame, image_size: int = 224) -> torch.Tensor:
+    """
+    Helper to create a tensor for the cropped image. It loads the image, gets the combined mask, computes the bounding box, crops the image, resizes it, and converts it to a tensor.
+    """
+    cropped_img_np, _ = _get_cropped_arrays(image_path, image_index, masks_df)
+
+
+    img_resized = Image.fromarray(cropped_img_np).resize((image_size, image_size), Image.BILINEAR)
+    img_tensor = to_tensor(img_resized) # Shape: [3, 224, 224]
+
+    return img_tensor
+
+
+def _create_cropped_mask_tensor(image_path: str, image_index: str, masks_df: pd.DataFrame, image_size: int = 224) -> torch.Tensor:
+    """
+    Helper to create a tensor for the cropped mask. It gets the combined mask, computes the bounding box, crops the mask, resizes it, and converts it to a tensor.
+    """
+    _, cropped_mask_np = _get_cropped_arrays(image_path, image_index, masks_df)
+
+
+    mask_resized = Image.fromarray(cropped_mask_np * 255).resize((image_size, image_size), Image.NEAREST)
+    mask_tensor = to_tensor(mask_resized) # Shape: [1, 224, 224]
+
+    return mask_tensor
+
+def _convert_to_tensor_and_resize(image_path: str, image_size: int) -> torch.Tensor:
+    """Helper function to load an image, convert it to a tensor, and resize it"""
+    image = Image.open(image_path).convert("RGB")
+    transform = v2.Compose(
+        [
+            v2.Resize((image_size, image_size)),
+            v2.ToTensor()
+        ]
+    )
+    return transform(image)
+
+def _precompute_and_save_tensor(images_dir: str, output_dir: str, df: pd.DataFrame, image_column: str, image_size: int) -> str:
+    """Helper function to precompute tensors for a given dataframe and save them to disk"""
+
+    for image_index in tqdm(df[image_column], desc=f"Precomputing images"):
+        src = os.path.join(images_dir, image_index)
+        image_tensor = _convert_to_tensor_and_resize(src, image_size)
+        dst = os.path.join(output_dir, image_index.replace(".png", ".pt"))
+        torch.save(image_tensor, dst)
+
+    return output_dir
+
+def _precompute_and_save_tensor_cropped(images_dir: str, output_dir: str, df: pd.DataFrame, image_column: str, masks_df: pd.DataFrame, image_size: int) -> str:
+    """Helper function to precompute tensors for cropped images and save them to disk"""
+
+    for image_index in tqdm(df[image_column], desc=f"Precomputing cropped images"):
+        src = os.path.join(images_dir, image_index)
+        cropped_image_tensor = _create_cropped_image_tensor(src, image_index, masks_df, image_size)
+        dst = os.path.join(output_dir, image_index.replace(".png", "_cropped.pt"))
+        torch.save(cropped_image_tensor, dst)
+
+    return output_dir
+
+def _precompute_and_save_mask_cropped(images_dir: str, output_dir: str, df: pd.DataFrame, image_column: str, masks_df: pd.DataFrame, image_size: int) -> str:
+    """Helper function to precompute tensors for cropped masks and save them to disk"""
+
+    for image_index in tqdm(df[image_column], desc=f"Precomputing cropped masks"):
+        src = os.path.join(images_dir, image_index)
+        cropped_mask_tensor = _create_cropped_mask_tensor(src, image_index, masks_df, image_size)
+        dst = os.path.join(output_dir, image_index.replace(".png", "_cropped_mask.pt"))
+        torch.save(cropped_mask_tensor, dst)
+
+    return output_dir
+
+def _precompute_tensors_for_dataframe(
+    images_dir: str,
+    output_dir_full: str,
+    output_dir_crop: str,
+    output_dir_mask: str,
     df: pd.DataFrame,
-    images_dir: str,
-    output_path: str,
-    image_size: int | None = None,
-    image_col: str = "image_index",
-    transform_config: dict[str, Any] | None = None,
+    image_column: str,
+    masks_df: pd.DataFrame,
+    image_size: int,
+    option: str = "full",
+    compute: bool = False
 ) -> None:
-    images_dir = Path(images_dir)
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    transform_config = transform_config or {}
-    transform = _build_transform_from_config(transform_config)
-
-    n = len(df)
-
-    use_float32 = (
-        "normalize" in transform_config and transform_config["normalize"] is not None
-    )
-    dtype = np.float32 if use_float32 else np.uint8
-
-    arr = np.lib.format.open_memmap(
-        output_path,
-        dtype=dtype,
-        mode="w+",
-        shape=(n, image_size, image_size),
-    )
-
-    for i, image_name in enumerate(tqdm(df[image_col].tolist(), total=n)):
-        img_path = images_dir / image_name
-
-        with Image.open(img_path) as img:
-            img = transform(img)           # [1, H, W]
-            img = img.squeeze(0).numpy()   # [H, W]
-
-            if img.shape != (image_size, image_size):
-                raise ValueError(
-                    f"Transformed image {image_name} has shape {img.shape}, "
-                    f"expected ({image_size}, {image_size})."
-                )
-
-            if dtype == np.uint8:
-                img = (img * 255.0).clip(0, 255).astype(np.uint8)
-            else:
-                img = img.astype(np.float32)
-
-            arr[i] = img
-
-    arr.flush()
-    print(f"Saved memmap to: {output_path}")
-
-
-def precompute_images_to_npy(
-    train_val_df: pd.DataFrame,
-    test_df: pd.DataFrame,
-    images_dir: str,
-    train_val_output_path: str,
-    test_output_path: str,
-    image_transform_config: dict[str, Any],
-    image_size: int | None = None,
-    image_col: str = "image_index",
-) -> None:
-    """Precompute train/val and test images to .npy memmap files."""
-    if Path(train_val_output_path).exists() and Path(test_output_path).exists():
-        print("Precomputed image files already exist. Skipping precomputation.")
+    """Precomputes tensors for both full and cropped images and saves them to disk"""
+    if not compute:
+        print(f"Skipping precomputation for {option} images as compute_tensors is false.")
         return
-
-    if not Path(train_val_output_path).exists():
-        _precompute_images_to_npy(
-            df=train_val_df,
-            images_dir=images_dir,
-            output_path=train_val_output_path,
-            image_size=image_size,
-            image_col=image_col,
-            transform_config=image_transform_config,
-        )
-
-    if not Path(test_output_path).exists():
-        _precompute_images_to_npy(
-            df=test_df,
-            images_dir=images_dir,
-            output_path=test_output_path,
-            image_size=image_size,
-            image_col=image_col,
-            transform_config=image_transform_config,
-        )
+    if option == "full":
+        os.makedirs(output_dir_full, exist_ok=True)
+        _precompute_and_save_tensor(images_dir, output_dir_full, df, image_column, image_size)
+    elif option == "cropped":
+        os.makedirs(output_dir_crop, exist_ok=True)
+        _precompute_and_save_tensor_cropped(images_dir, output_dir_crop, df, image_column, masks_df, image_size)
+    elif option == "cropped_with_mask":
+        os.makedirs(output_dir_crop, exist_ok=True)
+        os.makedirs(output_dir_mask, exist_ok=True)
+        _precompute_and_save_tensor_cropped(images_dir, output_dir_crop, df, image_column, masks_df, image_size)
+        _precompute_and_save_mask_cropped(images_dir, output_dir_mask, df, image_column, masks_df, image_size)
+    else:
+        raise ValueError(f"Invalid option: {option}. Must be one of 'full', 'cropped', or 'cropped_with_mask'.")
 
 
-# Precomputing labels to npy files for faster loading during training
-def _precompute_labels_to_npy(
+def build_tensor_dataset(
     df: pd.DataFrame,
-    pathology_list: list[str],
-) -> np.ndarray:
+    masks_df: pd.DataFrame,
+    images_dir: str,
+    out_dir_full: str,
+    out_dir_crop: str,
+    out_dir_mask: str,
+    image_size: int = 224,
+    image_type: str = "full",
+    compute_tensors: bool = False
+) -> pd.DataFrame:
+    """Builds a dataset by loading precomputed tensors for images and masks based on the provided dataframe"""
 
-    y_labels = df[pathology_list].values.astype(np.float32)
-    return y_labels
+
+    _precompute_tensors_for_dataframe(
+        images_dir=images_dir,
+        output_dir_full=out_dir_full,
+        output_dir_crop=out_dir_crop,
+        output_dir_mask=out_dir_mask,
+        df=df,
+        image_column="image_index",
+        masks_df=masks_df,
+        image_size=image_size,
+        option=image_type,
+        compute=compute_tensors
+    )
 
 
-def precompute_labels(
-    train_val_df: pd.DataFrame, test_df: pd.DataFrame, pathology_list: list[str]
-) -> tuple[np.ndarray, np.ndarray]:
-    """Precomputes the labels to npy files for faster loading during training"""
-    train_val_labels = _precompute_labels_to_npy(train_val_df, pathology_list)
-    test_labels = _precompute_labels_to_npy(test_df, pathology_list)
+    tensor_df = df.copy()
 
-    return train_val_labels, test_labels
+    if image_type == "full":
+        tensor_df["image_tensor_path"] = tensor_df["image_index"].apply(
+            lambda x: os.path.join(out_dir_full, f"{x.replace('.png', '.pt')}")
+        )
+    elif image_type == "cropped":
+        tensor_df["image_tensor_path"] = tensor_df["image_index"].apply(
+            lambda x: os.path.join(out_dir_crop, f"{x.replace('.png', '_cropped.pt')}")
+        )
+    elif image_type == "cropped_with_mask":
+        tensor_df["image_tensor_path"] = tensor_df["image_index"].apply(
+            lambda x: os.path.join(out_dir_crop, f"{x.replace('.png', '_cropped.pt')}")
+        )
+        tensor_df["mask_tensor_path"] = tensor_df["image_index"].apply(
+            lambda x: os.path.join(out_dir_mask, f"{x.replace('.png', '_cropped_mask.pt')}")
+        )
+
+    return tensor_df

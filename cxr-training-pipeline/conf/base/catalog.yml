@@ -32,23 +32,14 @@ xray_test:
   load_args:
     dtype_backend: "numpy_nullable"
 
-# 02_intermediate files - preprocessed data
-train_val_images_npy:
-  type: cxr_training_pipeline.extras.custom_kedro_dataset.numpy_memmap_dataset.NumpyMemmapDataset
-  filepath: ${globals:precomputed_root}/${globals:resize}/train_images.npy
+# 05_model_input files - preprocessed tensors datasets
+tensor_train_val_dataset:
+  type: pandas.CSVDataset
+  filepath: data/05_model_input/tensor_train_val.csv
 
-test_images_npy:
-  type: cxr_training_pipeline.extras.custom_kedro_dataset.numpy_memmap_dataset.NumpyMemmapDataset
-  filepath: ${globals:precomputed_root}/${globals:resize}/test_images.npy
-
-# Labels
-train_val_labels_npy:
-  type: cxr_training_pipeline.extras.custom_kedro_dataset.numpy_memmap_dataset.NumpyMemmapDataset
-  filepath: ${globals:precomputed_root}/${globals:resize}/train_labels.npy
-
-test_labels_npy:
-  type: cxr_training_pipeline.extras.custom_kedro_dataset.numpy_memmap_dataset.NumpyMemmapDataset
-  filepath: ${globals:precomputed_root}/${globals:resize}/test_labels.npy
+tensor_test_dataset:
+  type: pandas.CSVDataset
+  filepath: data/05_model_input/tensor_test.csv
 
 # model, valus for defaultthresholds, and threshold search results
 best_checkpoint_path:

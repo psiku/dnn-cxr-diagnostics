@@ -1,3 +1,5 @@
+"""Old version of dataset class, using precomputed tensors. Kept for reference and potential future use, but not currently used in the pipeline."""
+
 import numpy as np
 import pandas as pd
 import torch

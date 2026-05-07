@@ -1,6 +1,7 @@
-from cxr_training_pipeline.lightning_utils.data_module import ImageOnlyDataModule, BaseDataModule
+from cxr_training_pipeline.lightning_utils.data_module import ImageOnlyDataModule, TensorDataModule, BaseDataModule
 from cxr_training_pipeline.lightning_utils.classifier_module import ClassifierModule, BaseClassifier
 from cxr_training_pipeline.models.paper_based.classifier import CXRClassifier
+from cxr_training_pipeline.models.classifier import ChestXRayClassifier
 
 
 class DataModuleFactory:
@@ -8,6 +9,7 @@ class DataModuleFactory:
 
     _modules = {
         "image_only": ImageOnlyDataModule,
+        "tensor": TensorDataModule,
     }
 
     @classmethod
@@ -22,11 +24,12 @@ class ClassifierFactory:
     """Factory class for creating classifiers. Created for scalability and to avoid circular imports."""
 
     _classifiers = {
-         "cxr_classifier": CXRClassifier,
+        "cxr_classifier": CXRClassifier,
+        "chest_xray_classifier": ChestXRayClassifier,
     }
 
     @classmethod
-    def create(cls, classifier_name: str, **kwargs) -> CXRClassifier:
+    def create(cls, classifier_name: str, **kwargs):
         classifier_class = cls._classifiers.get(classifier_name)
         if not classifier_class:
             raise ValueError(f"Classifier '{classifier_name}' not found in factory.")

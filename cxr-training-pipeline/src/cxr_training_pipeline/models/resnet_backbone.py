@@ -3,8 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.models import (
     resnet50,
-    ResNet50_Weights,
-)
+    ResNet50_Weights)
 
 
 class ResNet50Backbone(nn.Module):

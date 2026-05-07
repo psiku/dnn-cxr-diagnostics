@@ -11,24 +11,29 @@ training:
     random_scale: [0.95, 1.05]
 
   datamodule:
-    name: "image_only"
+    name: "tensor"
     kwargs:
       batch_size: 32
-      num_workers: 0
-      train_val_images_path: "${globals:precomputed_root}/${globals:resize}/train_images.npy"
-      test_images_path: "${globals:precomputed_root}/${globals:resize}/test_images.npy"
-      y_train_val_path: "${globals:precomputed_root}/${globals:resize}/train_labels.npy"
-      y_test_path: "${globals:precomputed_root}/${globals:resize}/test_labels.npy"
+      num_workers: 7
+      path_col: "image_tensor_path"
+      mask_path_col: null # Change to "mask_tensor_path" if using `image_type: "cropped_with_mask"`
+      label_cols: ${data_processing.pathology_list}
 
+# Backbone and classifier configuration
   classifier:
-    name: "cxr_classifier"
+    name: "chest_xray_classifier"  # cxr_classifier - old classfier name
     kwargs:
       num_classes: 14
-      transition_dim: 2048
-      pooling: "lse"
-      lse_r: 10.0
+      backbone_name: "resnet101"          # choices: "resnet18", "resnet50", "resnet101", "resnet152", "densenet121", "densenet169", "densenet201", "densenet161", "efficientnet_b0", "efficientnet_b1", "efficientnet_b2", "efficientnet_b3", "efficientnet_b4", "efficientnet_b5", "efficientnet_b6", "efficientnet_b7"
+      pretrained: true
+      grayscale: false
       backbone_trainable_layers:
-        - "layer4"
+        - "features.7"
+      transition_dim: 2048
+      use_transition: true               # Use 1x1 conv transition layer
+      pooling: "lse"                     # choices: "lse", "avg", "max"
+      lse_r: 10.0                        # LSE temperature parameter
+      dropout: 0.1                       # Dropout after pooling
 
 
   # ligthning wrapper for the classifier
@@ -37,13 +42,13 @@ training:
     kwargs:
       num_classes: 14
       lr: 0.0001
-      threshold: 0.5
+      threshold: 0.4
 
   trainer:
-    max_epochs: 40
+    max_epochs: 100
     precision: "16-mixed"
     log_every_n_steps: 10
     accumulate_grad_batches: 1
-    patience: 5
+    patience: 10
     mlflow_experiment_name: "${globals:mlflow_experiment_name}"
     run_name: "${globals:run_name}"

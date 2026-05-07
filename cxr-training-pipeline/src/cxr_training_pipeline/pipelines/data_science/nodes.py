@@ -12,37 +12,7 @@ import pandas as pd
 from cxr_training_pipeline.lightning_utils.factory import DataModuleFactory, ClassifierFactory, LightningModuleFactory
 import torch
 import mlflow
-
-
-class MlflowMetricLoggingCallback(Callback):
-    """Logs epoch metrics and learning rates to the active MLflow run."""
-
-    @staticmethod
-    def _log_callback_metrics(trainer: pl.Trainer) -> None:
-        active_run = mlflow.active_run()
-        if active_run is None:
-            return
-
-        step = int(trainer.current_epoch)
-        for metric_name, metric_value in trainer.callback_metrics.items():
-            if isinstance(metric_value, torch.Tensor):
-                metric_value = metric_value.detach().cpu().item()
-            if isinstance(metric_value, (int, float)):
-                mlflow.log_metric(metric_name, float(metric_value), step=step)
-
-    def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
-        active_run = mlflow.active_run()
-        if active_run is not None:
-            step = int(trainer.current_epoch)
-            for opt_idx, optimizer in enumerate(trainer.optimizers):
-                for group_idx, param_group in enumerate(optimizer.param_groups):
-                    lr = param_group.get("lr")
-                    if lr is not None:
-                        mlflow.log_metric(f"lr/opt{opt_idx}_group{group_idx}", float(lr), step=step)
-        self._log_callback_metrics(trainer)
-
-    def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
-        self._log_callback_metrics(trainer)
+from cxr_training_pipeline.mlflow.logging_callback import MlflowMetricLoggingCallback
 
 
 # DATA PREPARATION NODE
@@ -125,13 +95,47 @@ def build_datamodule_node(datamodule_name: str, datamodule_config: dict):
 
 # CLASSIFIER NODE
 def build_classifier_node(classifier_params: Dict[str, Any]):
-    """Creates the backbone model using the Factory."""
-    return ClassifierFactory.create(classifier_name=classifier_params["name"], **classifier_params["kwargs"])
+    """
+    Creates the backbone model using the Factory.
+    Example:
+        classifier_params = {
+            "name": "chest_xray_classifier",
+            "kwargs": {
+                "num_classes": 14,
+                "backbone_name": "resnet50",
+                "pretrained": True,
+                "pooling": "lse",
+                "lse_r": 10.0,
+            }
+        }
+    """
+    classifier_name = classifier_params.get("name")
+    if not classifier_name:
+        raise ValueError(
+            "classifier_params must contain 'name' key. "
+            "Supported values: 'cxr_classifier', 'chest_xray_classifier'"
+        )
+
+    kwargs = classifier_params.get("kwargs", {})
+    return ClassifierFactory.create(classifier_name=classifier_name, **kwargs)
 
 
 def build_lightning_module_node(model: torch.nn.Module, lit_params: Dict[str, Any]):
-    """Wraps the backbone model in the PyTorch Lightning module."""
-    return LightningModuleFactory.create(module_name=lit_params["name"], model=model, **lit_params["kwargs"])
+    """
+    Wraps the backbone model in the PyTorch Lightning module.
+    Example:
+        lit_params = {
+            "name": "default_classifier",
+            "kwargs": {
+                "num_classes": 14,
+                "lr": 1e-4,
+                "threshold": 0.5,
+            }
+        }
+    """
+    module_name = lit_params.get("name", "default_classifier")
+    kwargs = lit_params.get("kwargs", {})
+    return LightningModuleFactory.create(module_name=module_name, model=model, **kwargs)
 
 
 # TRAINING NODE
