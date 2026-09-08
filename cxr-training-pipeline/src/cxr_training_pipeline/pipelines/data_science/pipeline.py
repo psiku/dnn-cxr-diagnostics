@@ -6,6 +6,7 @@ from .nodes import (
     prepare_datamodule_config,
     build_datamodule_node,
     build_classifier_node,
+    compute_class_pos_weights_node,
     build_lightning_module_node,
     train_model_node,
     predict_validation_node,
@@ -55,8 +56,19 @@ def create_pipeline(**kwargs) -> Pipeline:
                 name="build_classifier_node",
             ),
             Node(
+                func=compute_class_pos_weights_node,
+                inputs=[
+                    "tensor_train_val_dataset",
+                    "train_idx",
+                    "params:training.datamodule",
+                    "params:training.lit_module",
+                ],
+                outputs="pos_weights",
+                name="compute_class_pos_weights_node",
+            ),
+            Node(
                 func=build_lightning_module_node,
-                inputs=["model", "params:training.lit_module"],
+                inputs=["model", "params:training.lit_module", "pos_weights"],
                 outputs="lit_model",
                 name="build_lightning_module_node",
             ),

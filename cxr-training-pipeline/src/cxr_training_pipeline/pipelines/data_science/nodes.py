@@ -10,12 +10,83 @@ from lightning.pytorch.callbacks import (
 )
 import pandas as pd
 from cxr_training_pipeline.lightning_utils.factory import DataModuleFactory, ClassifierFactory, LightningModuleFactory
+from cxr_training_pipeline.lightning_utils.loss import resolve_pos_weights
 import torch
 import mlflow
 from cxr_training_pipeline.mlflow.logging_callback import MlflowMetricLoggingCallback
 
 
 # DATA PREPARATION NODE
+def _rebalance_train_indices(
+    train_val_df: pd.DataFrame,
+    train_idx: np.ndarray,
+    rebalance_cfg: dict[str, Any] | None,
+    default_random_state: int = 42,
+) -> np.ndarray:
+    """Apply optional under/over sampling for selected training subsets."""
+    if not rebalance_cfg:
+        return train_idx
+    if not bool(rebalance_cfg.get("enabled", False)):
+        return train_idx
+
+    rng = np.random.default_rng(
+        seed=int(rebalance_cfg.get("random_state", default_random_state))
+    )
+    train_df = train_val_df.iloc[train_idx].copy()
+    selected_indices = list(train_idx.astype(np.int64))
+
+    def _selector_pool(selector: str) -> np.ndarray:
+        if selector == "no_finding":
+            if "finding_labels" not in train_df.columns:
+                raise ValueError(
+                    "Cannot use selector 'no_finding' because column 'finding_labels' is missing."
+                )
+            mask = train_df["finding_labels"].fillna("").astype(str).str.strip() == "No Finding"
+            return train_df.index[mask].to_numpy(dtype=np.int64)
+
+        if selector not in train_df.columns:
+            raise ValueError(f"Selector '{selector}' not found in train dataframe columns.")
+
+        return train_df.index[train_df[selector].astype(int) == 1].to_numpy(dtype=np.int64)
+
+    rules = rebalance_cfg.get("rules")
+    if isinstance(rules, list) and rules:
+        normalized_rules = rules
+
+    for rule in normalized_rules:
+        selector = str(rule.get("selector", "")).strip()
+        mode = str(rule.get("mode", "")).strip().lower()
+        target = int(rule.get("target_count", -1))
+
+        if not selector:
+            raise ValueError("Each class_rebalance rule must include a non-empty 'selector'.")
+        if mode not in {"under", "over"}:
+            raise ValueError(
+                f"class_rebalance rule for '{selector}' has invalid mode '{mode}'."
+            )
+        if target < 0:
+            raise ValueError(
+                f"class_rebalance rule for '{selector}' has invalid target_count={target}."
+            )
+
+        pool = _selector_pool(selector)
+        current_count = len(pool)
+        if current_count == 0:
+            continue
+
+        if mode == "over" and target > current_count:
+            extra = rng.choice(pool, size=target - current_count, replace=True)
+            selected_indices.extend(extra.tolist())
+        elif mode == "under" and target < current_count:
+            keep_pool = set(rng.choice(pool, size=target, replace=False).tolist())
+            pool_set = set(pool.tolist())
+            selected_indices = [
+                idx for idx in selected_indices if idx not in pool_set or idx in keep_pool
+            ]
+
+    return np.asarray(selected_indices, dtype=np.int64)
+
+
 def make_train_val_indices(train_val_df, params: dict[str, float | int]) -> tuple[np.ndarray, np.ndarray]:
     """Splits the dataframe into train and validation indices."""
     train_val_df = train_val_df.reset_index(drop=True)
@@ -29,6 +100,13 @@ def make_train_val_indices(train_val_df, params: dict[str, float | int]) -> tupl
     train_idx = indices[:split_idx]
     val_idx = indices[split_idx:]
 
+    train_idx = _rebalance_train_indices(
+        train_val_df=train_val_df,
+        train_idx=train_idx,
+        rebalance_cfg=params.get("class_rebalance"),
+        default_random_state=int(params["random_state"]),
+    )
+
     train_idx = np.array(train_idx, dtype=np.int64)
     val_idx = np.array(val_idx, dtype=np.int64)
 
@@ -40,18 +118,22 @@ def build_transforms_node(transform_params: Dict[str, Any]) -> tuple[transforms.
     Creates PyTorch transforms for training and evaluation.
     Only training gets the augmentations.
     """
-    train_tfms = transforms.Compose([
+    normalize_mean = transform_params.get("normalize_mean")
+    normalize_std = transform_params.get("normalize_std")
+    apply_normalization = bool(transform_params.get("apply_normalization", True))
+
+    train_ops: list[Any] = [
         transforms.RandomAffine(
             degrees=transform_params["random_rotation"],
             translate=tuple(transform_params["random_translate"]),
-            scale=tuple(transform_params["random_scale"])
+            scale=tuple(transform_params["random_scale"]),
         ),
-        # transforms.ToTensor(), # just in case if we switch to tensor-based transforms in the future
-    ])
+        transforms.Normalize(mean=normalize_mean, std=normalize_std) if apply_normalization else None,
+    ]
+    eval_ops: list[Any] = [transforms.Normalize(mean=normalize_mean, std=normalize_std) if apply_normalization else None]
 
-    eval_tfms = transforms.Compose([
-        # transforms.ToTensor(),
-    ])
+    train_tfms = transforms.Compose(train_ops)
+    eval_tfms = transforms.Compose(eval_ops)
 
     return train_tfms, eval_tfms
 
@@ -120,7 +202,42 @@ def build_classifier_node(classifier_params: Dict[str, Any]):
     return ClassifierFactory.create(classifier_name=classifier_name, **kwargs)
 
 
-def build_lightning_module_node(model: torch.nn.Module, lit_params: Dict[str, Any]):
+def compute_class_pos_weights_node(
+    train_val_df: pd.DataFrame,
+    train_idx: np.ndarray,
+    datamodule_params: Dict[str, Any],
+    lit_module_params: Dict[str, Any],
+) -> list[float]:
+    """Compute per-class pos_weight from the training split when configured.
+
+    Returns an empty list when pos_weight is not requested. We avoid returning
+    None because Kedro forbids saving None to any dataset.
+    """
+    loss_cfg = lit_module_params.get("kwargs", {}).get("loss")
+    label_cols = datamodule_params.get("kwargs", {}).get("label_cols")
+    train_df = train_val_df.iloc[train_idx]
+
+    pos_weight = resolve_pos_weights(
+        loss_cfg=loss_cfg,
+        train_df=train_df,
+        label_cols=label_cols,
+    )
+    if pos_weight is None:
+        return []
+
+    weights = pos_weight.detach().cpu().tolist()
+    loss_name = (loss_cfg or {}).get("name", "batch_balanced_bce")
+    print(f"Computed pos_weight for loss '{loss_name}':")
+    for class_name, weight in zip(label_cols, weights):
+        print(f"  {class_name}: {weight:.4f}")
+    return weights
+
+
+def build_lightning_module_node(
+    model: torch.nn.Module,
+    lit_params: Dict[str, Any],
+    pos_weights: list[float] | None = None,
+):
     """
     Wraps the backbone model in the PyTorch Lightning module.
     Example:
@@ -130,11 +247,17 @@ def build_lightning_module_node(model: torch.nn.Module, lit_params: Dict[str, An
                 "num_classes": 14,
                 "lr": 1e-4,
                 "threshold": 0.5,
+                "loss": {
+                    "name": "bce_with_logits",
+                    "pos_weight": {"compute_from_train": true},
+                },
             }
         }
     """
     module_name = lit_params.get("name", "default_classifier")
-    kwargs = lit_params.get("kwargs", {})
+    kwargs = dict(lit_params.get("kwargs", {}))
+    if pos_weights:
+        kwargs["pos_weight"] = pos_weights
     return LightningModuleFactory.create(module_name=module_name, model=model, **kwargs)
 
 

@@ -18,9 +18,9 @@ data_processing:
   columns_to_keep:
     - "image_index"
     - "finding_labels"
-    - "patient_age"
-    - "patient_sex"
-    - "view_position"
+    # - "patient_age"
+    # - "patient_sex"
+    # - "view_position"
 
   ohe_column: "finding_labels"
 
@@ -31,4 +31,4 @@ data_processing_precompute:
   out_dir_mask: data/05_model_input/masks_cropped_${globals:resize}
   image_size: ${globals:resize}
   compute_tensors: false
-  image_type: "full" # Options: "full", "cropped", "cropped_with_mask"
+  image_type: "cropped_with_mask" # Options: "full", "cropped", "cropped_with_mask"

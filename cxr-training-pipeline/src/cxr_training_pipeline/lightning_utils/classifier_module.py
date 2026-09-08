@@ -1,4 +1,4 @@
-from cxr_training_pipeline.models.paper_based.w_cel import BatchBalancedBCEWithLogitsLoss
+from cxr_training_pipeline.lightning_utils.loss import build_loss_criterion
 from torch import nn
 from abc import ABC, abstractmethod
 import torch
@@ -59,9 +59,17 @@ class ClassifierModule(BaseClassifier):
         scheduler_class=torch.optim.lr_scheduler.ReduceLROnPlateau,
         optimizer_kwargs: dict = None,
         scheduler_kwargs: dict = None,
+        loss: dict | None = None,
+        pos_weight: torch.Tensor | list[float] | None = None,
     ):
         super().__init__()
         self.model = model
+        self.loss_cfg = loss or {"name": "batch_balanced_bce"}
+        pos_weight_tensor = (
+            torch.as_tensor(pos_weight, dtype=torch.float32)
+            if pos_weight is not None
+            else None
+        )
         self.save_hyperparameters(ignore=["model"])
         self.optimizer_class = optimizer_class
         self.scheduler_class = scheduler_class
@@ -69,7 +77,7 @@ class ClassifierModule(BaseClassifier):
         self.optimizer_kwargs = optimizer_kwargs or {}
         self.scheduler_kwargs = scheduler_kwargs or {}
 
-        self.criterion = BatchBalancedBCEWithLogitsLoss()
+        self.criterion = build_loss_criterion(self.loss_cfg, pos_weight_tensor)
 
         default_thresholds = torch.full((num_classes,), float(threshold), dtype=torch.float32)
         self.register_buffer("thresholds", default_thresholds)
@@ -143,7 +151,7 @@ class ClassifierModule(BaseClassifier):
 
     def _get_preds(self, probs: torch.Tensor) -> torch.Tensor:
         thresholds = self.thresholds.view(1, -1).to(probs.device)
-        return (probs > thresholds).int()
+        return (probs >= thresholds).int()
 
     def _shared_step(self, batch):
         logits, probs, target = self._shared_inference(batch)

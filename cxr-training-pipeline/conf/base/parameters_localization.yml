@@ -1,0 +1,19 @@
+localization:
+  # Spatial size the model was trained on. CAMs are upsampled to this size
+  # and the bbox is rasterized at the same resolution before computing IoU.
+  image_size: 224
+
+  # Coordinate space of the NIH BBox_List_2017.csv (original images are 1024x1024).
+  original_size: 1024
+
+  # How to binarize the CAM:
+  #   "top_percent" -> threshold at the (1 - top_percent) quantile of the CAM
+  #   "value"       -> threshold at threshold_value (CAM is min-max normalized to [0, 1])
+  threshold_mode: "top_percent"
+  top_percent: 0.20
+  threshold_value: 0.5
+
+  # Restrict to bbox rows whose image_index is in tensor_test_dataset.
+  # This is the rigorous setting (no train leakage). Set to false to score all
+  # 984 bbox rows including images that may have been seen in training.
+  filter_to_test_set: true

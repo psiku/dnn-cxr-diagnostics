@@ -3,12 +3,35 @@ training:
   split:
     val_size: 0.25
     random_state: 42
+    class_rebalance:
+      enabled: true
+      rules:
+        - selector: "no_finding"
+          mode: "under"
+          target_count: 25000
+        - selector: "Hernia"
+          mode: "over"
+          target_count: 1200
+        - selector: "Pneumonia"
+          mode: "over"
+          target_count: 2500
+        - selector: "Edema"
+          mode: "over"
+          target_count: 2500
+        - selector: "Fibrosis"
+          mode: "over"
+          target_count: 2500
+
 
   # Data augmentations
   transforms:
     random_rotation: 10
     random_translate: [0.05, 0.05]
     random_scale: [0.95, 1.05]
+    apply_normalization: true
+    normalize_mean: [0.485, 0.456, 0.406, 0]
+    normalize_std: [0.229, 0.224, 0.225, 1]
+    # remember to update additional normalization if using masks (0,1)
 
   datamodule:
     name: "tensor"
@@ -16,7 +39,7 @@ training:
       batch_size: 32
       num_workers: 7
       path_col: "image_tensor_path"
-      mask_path_col: null # Change to "mask_tensor_path" if using `image_type: "cropped_with_mask"`
+      mask_path_col: "mask_tensor_path" # Change to "mask_tensor_path" if using `image_type: "cropped_with_mask"`, null if not using masks
       label_cols: ${data_processing.pathology_list}
 
 # Backbone and classifier configuration
@@ -24,16 +47,20 @@ training:
     name: "chest_xray_classifier"  # cxr_classifier - old classfier name
     kwargs:
       num_classes: 14
-      backbone_name: "resnet101"          # choices: "resnet18", "resnet50", "resnet101", "resnet152", "densenet121", "densenet169", "densenet201", "densenet161", "efficientnet_b0", "efficientnet_b1", "efficientnet_b2", "efficientnet_b3", "efficientnet_b4", "efficientnet_b5", "efficientnet_b6", "efficientnet_b7"
+      backbone_name: densenet169  # choices: "resnet18", "resnet50", "resnet101", "resnet152", "densenet121", "densenet169", "densenet201", "densenet161", "efficientnet_b0", "efficientnet_b1", "efficientnet_b2", "efficientnet_b3", "efficientnet_b4", "efficientnet_b5", "efficientnet_b6", "efficientnet_b7"
       pretrained: true
       grayscale: false
+      use_mask_channel: true   # set false (and mask_path_col: null) for legacy no-mask runs
       backbone_trainable_layers:
-        - "features.7"
-      transition_dim: 2048
+      #  - features.6
+      #  - features.7
+       - features.denseblock4
+       - features.norm5
+      transition_dim: 1664
       use_transition: true               # Use 1x1 conv transition layer
       pooling: "lse"                     # choices: "lse", "avg", "max"
-      lse_r: 10.0                        # LSE temperature parameter
-      dropout: 0.1                       # Dropout after pooling
+      lse_r: 10.0
+      dropout: 0.1
 
 
   # ligthning wrapper for the classifier
@@ -41,8 +68,18 @@ training:
     name: "default_classifier"
     kwargs:
       num_classes: 14
-      lr: 0.0001
-      threshold: 0.4
+      lr: 0.00001
+      threshold: 0.5
+      # loss options: "batch_balanced_bce" (default, paper-based) or "bce_with_logits"
+      loss:
+        name: "batch_balanced_bce"
+        eps: 1.0e-8
+        # Example for weighted BCE (uncomment and set name to "bce_with_logits"):
+        # name: "bce_with_logits"
+        # pos_weight:
+        #   compute_from_train: true   # neg_count / pos_count per class on train split
+        #   eps: 1.0e-8
+        # #   values: null               # optional manual override, e.g. [1.0, 2.5, ...]
 
   trainer:
     max_epochs: 100

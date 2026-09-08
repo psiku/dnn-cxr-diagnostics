@@ -1,5 +1,54 @@
 threshold_tuning:
-  start: 0.01
-  stop: 1.00
-  step: 0.01
+  # Fallback for classes with no positives in val or constrained objectives
+  # with no feasible candidate (e.g. recall_at_precision when the model
+  # never reaches the precision floor).
   default_threshold: 0.5
+
+  # Default objective: F2 (recall-leaning F-beta).
+  # Rationale: this is a triage tool. A missed finding is ~2x worse than a
+  # false alarm on average, because false alarms get filtered by the
+  # radiologist quickly while missed findings can leave the workflow.
+  objective:
+    name: "fbeta"
+    beta: 2.0
+
+  per_class_overrides:
+    # ----- Acute / time-critical findings -----
+    # Use a precision floor so we don't drown the radiologist in alarms,
+    # then maximize recall. min_precision is set roughly 2-5x the val
+    # prevalence so we are clearly better than the always-positive baseline.
+    # If the model can't reach this precision, the tuner falls back to
+    # default_threshold and writes status=fallback_no_candidate to the
+    # threshold_search_results parquet (worth checking).
+    Pneumothorax:                 # prev 3.1%
+      name: "recall_at_precision"
+      min_precision: 0.15
+    Consolidation:                # prev 3.3%
+      name: "recall_at_precision"
+      min_precision: 0.15
+    Edema:                        # prev 1.6%
+      name: "recall_at_precision"
+      min_precision: 0.10
+    Pneumonia:                    # prev 1.1%, model is typically weak here
+      name: "recall_at_precision"
+      min_precision: 0.05
+
+    # ----- Chronic findings -----
+    # F1: balanced; precision matters because these are not time-critical
+    # and false alarms are more costly relative to the (low) urgency of a miss.
+    Cardiomegaly:                 # prev 1.9%
+      name: "fbeta"
+      beta: 1.0
+    Emphysema:                    # prev 1.6%
+      name: "fbeta"
+      beta: 1.0
+    Fibrosis:                     # prev 1.5%
+      name: "fbeta"
+      beta: 1.0
+
+    # ----- Too rare for tuning -----
+    # 26 positives in val => bootstrap CI on best_thr is enormous; tuning
+    # is essentially noise. Keep default 0.5; F1 with low n is no better.
+    Hernia:
+      name: "fbeta"
+      beta: 1.0

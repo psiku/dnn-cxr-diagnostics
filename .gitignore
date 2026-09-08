@@ -215,3 +215,22 @@ WUT-Thesis/
 # mlflow files
 mlruns/
 mlflow*
+cxr-training-pipeline/checkpoints
+
+#ml artifacts
+mlartifacts/
+
+# hf-models
+hf-models/
+
+# random ml folders
+1/
+2/
+
+# 00_test notebook
+cxr-training-pipeline/notebooks/00_test/
+
+
+lightning_logs/
+
+.vscode/

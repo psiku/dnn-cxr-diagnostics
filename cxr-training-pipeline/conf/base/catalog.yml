@@ -83,10 +83,31 @@ test_metrics_tuned:
   type: json.JSONDataset
   filepath: data/08_reporting/${globals:mlflow_experiment_name}/${globals:run_name}/test_metrics_tuned.json
 
-test_metrics_comparison:
+test_per_class_before_tuning:
   type: pandas.ParquetDataset
-  filepath: data/08_reporting/${globals:mlflow_experiment_name}/${globals:run_name}/test_metrics_comparison.parquet
+  filepath: data/08_reporting/${globals:mlflow_experiment_name}/${globals:run_name}/test_per_class_before_tuning.parquet
 
-test_per_class_comparison:
+test_per_class_after_tuning:
   type: pandas.ParquetDataset
-  filepath: data/08_reporting/${globals:mlflow_experiment_name}/${globals:run_name}/test_per_class_comparison.parquet
+  filepath: data/08_reporting/${globals:mlflow_experiment_name}/${globals:run_name}/test_per_class_after_tuning.parquet
+
+# Localization IoU evaluation (CAM vs NIH bounding boxes)
+localization_iou_per_image:
+  type: pandas.ParquetDataset
+  filepath: data/08_reporting/${globals:mlflow_experiment_name}/${globals:run_name}/localization_iou_per_image.parquet
+
+localization_iou_per_class:
+  type: pandas.ParquetDataset
+  filepath: data/08_reporting/${globals:mlflow_experiment_name}/${globals:run_name}/localization_iou_per_class.parquet
+
+localization_iou_metrics:
+  type: json.JSONDataset
+  filepath: data/08_reporting/${globals:mlflow_experiment_name}/${globals:run_name}/localization_iou_metrics.json
+
+localization_weighted_iou_per_image:
+  type: pandas.ParquetDataset
+  filepath: data/08_reporting/${globals:mlflow_experiment_name}/${globals:run_name}/localization_weighted_iou_per_image.parquet
+
+localization_weighted_iou_metrics:
+  type: json.JSONDataset
+  filepath: data/08_reporting/${globals:mlflow_experiment_name}/${globals:run_name}/localization_weighted_iou_metrics.json

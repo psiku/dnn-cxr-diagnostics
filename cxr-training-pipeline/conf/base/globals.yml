@@ -3,5 +3,5 @@ resize: 224
 precomputed_root: data/02_intermediate/precomputed
 
 # MLflow experiment name
-mlflow_experiment_name: "cxr-classification-resnet101-224-no-scaling"
-run_name: "resnet101_224_no-scaling"
+mlflow_experiment_name: cxr-classification-densenet169-cropped_with_mask_correct_sampling
+run_name: densenet169_224_cropped_with_maskvi

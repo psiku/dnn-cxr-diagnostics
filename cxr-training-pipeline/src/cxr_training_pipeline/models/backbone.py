@@ -73,11 +73,19 @@ class TorchvisionBackbone(nn.Module):
         "efficientnet_b7": (efficientnet_b7, EfficientNet_B7_Weights.DEFAULT, ["features", 0, 0], ["features"]),
     }
 
-    def __init__(self, name: str, pretrained: bool = True, grayscale: bool = True):
+    def __init__(
+        self,
+        name: str,
+        pretrained: bool = True,
+        grayscale: bool = True,
+        use_mask_channel: bool = False,
+    ):
         super().__init__()
 
         if name not in self.CONFIGS:
             raise ValueError(f"Unsupported backbone: {name}. Choose from {list(self.CONFIGS)}")
+
+        self.use_mask_channel = use_mask_channel
 
         builder, default_weights, first_conv_path, features_path = self.CONFIGS[name]
 
@@ -86,6 +94,9 @@ class TorchvisionBackbone(nn.Module):
 
         if grayscale:
             self._convert_first_conv_to_grayscale(model, first_conv_path)
+
+        if use_mask_channel:
+            self._expand_first_conv_input_channels(model, first_conv_path, extra_channels=1)
 
         if name.startswith("resnet"):
             self.features = nn.Sequential(
@@ -116,6 +127,34 @@ class TorchvisionBackbone(nn.Module):
         with torch.no_grad():
             new_conv.weight.copy_(old_conv.weight.mean(dim=1, keepdim=True))
 
+            if old_conv.bias is not None:
+                new_conv.bias.copy_(old_conv.bias)
+
+        set_nested_attr(model, conv_path, new_conv)
+
+    def _expand_first_conv_input_channels(
+        self, model, conv_path, extra_channels: int = 1
+    ) -> None:
+        """Widen the first conv to accept extra input channels (e.g. organ mask)."""
+        old_conv = get_nested_attr(model, conv_path)
+        new_in = old_conv.in_channels + extra_channels
+
+        new_conv = nn.Conv2d(
+            in_channels=new_in,
+            out_channels=old_conv.out_channels,
+            kernel_size=old_conv.kernel_size,
+            stride=old_conv.stride,
+            padding=old_conv.padding,
+            bias=old_conv.bias is not None,
+        )
+
+        with torch.no_grad():
+            new_conv.weight[:, : old_conv.in_channels].copy_(old_conv.weight)
+            # Initialise mask-channel weights like the mean image-channel kernel.
+            mean_w = old_conv.weight.mean(dim=1, keepdim=True)
+            new_conv.weight[:, old_conv.in_channels :].copy_(
+                mean_w.expand(-1, extra_channels, -1, -1)
+            )
             if old_conv.bias is not None:
                 new_conv.bias.copy_(old_conv.bias)
 
