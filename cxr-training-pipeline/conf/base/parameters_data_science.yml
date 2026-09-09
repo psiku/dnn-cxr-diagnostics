@@ -29,8 +29,8 @@ training:
     random_translate: [0.05, 0.05]
     random_scale: [0.95, 1.05]
     apply_normalization: true
-    normalize_mean: [0.485, 0.456, 0.406, 0]
-    normalize_std: [0.229, 0.224, 0.225, 1]
+    normalize_mean: [0.485, 0.456, 0.406]
+    normalize_std: [0.229, 0.224, 0.225]
     # remember to update additional normalization if using masks (0,1)
 
   datamodule:
